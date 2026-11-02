@@ -385,6 +385,12 @@ SwellChordMotionEditor::SwellChordMotionEditor (SwellChordMotionProcessor& p)
 
     setupBar (volSlider, "vol");
     setupBar (bpmSlider, "bpm");
+    hostBpmDisplay.setFont (swellFont (15.0f, true));
+    hostBpmDisplay.setColour (Label::textColourId, background);
+    hostBpmDisplay.setColour (Label::backgroundColourId, orange);
+    hostBpmDisplay.setJustificationType (Justification::centred);
+    hostBpmDisplay.setTooltip ("Tempo synced to the DAW");
+    addChildComponent (hostBpmDisplay);
     setupCombo (instrBox, Instruments::names, "instr");
     setupCombo (styleBox, ChordEngine::styleNames(), "style");
     setupCombo (keyBox, ChordEngine::keyNames, "key");
@@ -543,7 +549,17 @@ void SwellChordMotionEditor::timerCallback()
     lane.setPlaying (proc.currentChord.load());
     undoButton.setEnabled (proc.undoManager.canUndo());
     redoButton.setEnabled (proc.undoManager.canRedo());
-    bpmSlider.setEnabled (! proc.hostSynced.load());
+    const bool synced = proc.hostSynced.load();
+    bpmSlider.setVisible (! synced);
+    hostBpmDisplay.setVisible (synced);
+    bpmLabel.setText (synced ? "SYNC" : "TEMPO", dontSendNotification);
+    bpmLabel.setColour (Label::textColourId, synced ? orange : dim);
+    if (synced)
+    {
+        const double bpm = proc.currentBpm.load();
+        const bool whole = std::abs (bpm - std::round (bpm)) < 0.005;
+        hostBpmDisplay.setText (String (bpm, whole ? 0 : 2) + " BPM", dontSendNotification);
+    }
 
     const auto playText = playButton.getToggleState() ? "STOP" : "PLAY";
     if (playButton.getButtonText() != playText)
@@ -603,6 +619,7 @@ void SwellChordMotionEditor::resized()
         undoButton.setBounds (row.removeFromRight (64));
         row.removeFromRight (18);
         bpmSlider.setBounds (row.removeFromRight (100));
+        hostBpmDisplay.setBounds (bpmSlider.getBounds());
         bpmLabel.setBounds (row.removeFromRight (52));
         row.removeFromRight (12);
         effectBox.setBounds (row.removeFromRight (100));
