@@ -99,14 +99,14 @@ inline std::optional<ChordItem> paletteChord (int key, int scale, int degree, in
 // Close voicing with every root between G#2 and G3; bass two octaves under the chord root
 inline std::vector<int> chordNotes (const ChordItem& c)
 {
-    const int base = 48 + c.root - (c.root > 7 ? 12 : 0);
+    const int base = 48 + c.root;   // same octave for every root, so A and B sit above G
     std::vector<int> notes;
     for (int i : c.intervals)
         notes.push_back (base + i);
     return notes;
 }
 
-inline int bassNote (const ChordItem& c) { return 36 + c.root - (c.root > 7 ? 12 : 0); }
+inline int bassNote (const ChordItem& c) { return 36 + c.root; }
 
 //==============================================================================
 enum Voice { fullChord = -1, bass = -2, bassFifth = -3 };
