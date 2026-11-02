@@ -29,7 +29,7 @@ if(APPLE)
 endif()
 
 juce_add_plugin(SwellChordMotion
-    COMPANY_NAME "Swell"
+    COMPANY_NAME "Swell-audio"
     BUNDLE_ID com.swell.chordmotion
     PLUGIN_MANUFACTURER_CODE Swel
     PLUGIN_CODE Chmo

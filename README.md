@@ -6,7 +6,7 @@
 
 <p align="center">
   Générateur de progressions d'accords — <b>Standalone</b>, <b>VST3</b> (Windows / Mac) et <b>AU</b> (Mac)<br>
-  par <b>Swell</b> · <a href="https://github.com/sevYOnDaTracks">@sevyondatracks</a>
+  par <b>Swell-audio</b> · <a href="https://github.com/sevYOnDaTracks">@sevyondatracks</a>
 </p>
 
 ---
@@ -109,4 +109,4 @@ Source/
 
 ---
 
-<p align="center"><sub>Swell · Chord Motion v1.2.0 · by @sevyondatracks</sub></p>
+<p align="center"><sub>Swell-audio · Chord Motion v1.2.0 · by @sevyondatracks</sub></p>
