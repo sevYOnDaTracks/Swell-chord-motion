@@ -120,6 +120,11 @@ private:
     juce::ComboBox instrBox, styleBox, keyBox, scaleBox, effectBox;
     juce::Label volLabel, instrLabel, styleLabel, scaleLabel, effectLabel, bpmLabel;
 
+    // Takes the key found by Swell Key (see SwellLink.h)
+    juce::TextButton swellKeyButton { "SWELL KEY" };
+    juce::uint32 swellKeyFlashUntil = 0;
+    void useSwellKey();
+
     juce::MidiKeyboardComponent keyboard;
 
     juce::String paletteTitle;

@@ -29,6 +29,7 @@ Le fonctionnement s'inspire du [Chord Player de OneMotion](https://www.onemotion
 | **MIDI Out** | Pilote tes propres VST avec la progression |
 | **Synchro DAW** | Suit le tempo et la lecture de ton DAW |
 | **DRAG MIDI** | Glisse la progression en `.mid` dans ta playlist (FL Studio, Ableton, Logic…) |
+| **SWELL KEY** | Un clic règle KEY et SCALE sur la gamme trouvée par le plugin Swell Key |
 
 ## Utilisation
 
@@ -108,4 +109,4 @@ Source/
 
 ---
 
-<p align="center"><sub>Swell · Chord Motion v1.1.0 · by @sevyondatracks</sub></p>
+<p align="center"><sub>Swell · Chord Motion v1.2.0 · by @sevyondatracks</sub></p>

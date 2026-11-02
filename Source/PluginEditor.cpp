@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "SwellLink.h"
 
 using namespace juce;
 using namespace SwellColours;
@@ -393,6 +394,9 @@ SwellChordMotionEditor::SwellChordMotionEditor (SwellChordMotionProcessor& p)
     setupCombo (scaleBox, ChordEngine::scaleNames, "scale");
     setupCombo (effectBox, Instruments::effectNames, "effect");
 
+    swellKeyButton.onClick = [this] { useSwellKey(); };
+    addAndMakeVisible (swellKeyButton);
+
     keyboard.setAvailableRange (24, 96);
     keyboard.setScrollButtonsVisible (false);
     keyboard.setOctaveForMiddleC (4);
@@ -455,6 +459,33 @@ void SwellChordMotionEditor::setupCombo (ComboBox& box, const StringArray& items
     box.addItemList (items, 1);
     addAndMakeVisible (box);
     comboAttachments.push_back (std::make_unique<AudioProcessorValueTreeState::ComboBoxAttachment> (proc.apvts, paramId, box));
+}
+
+// Sets KEY and SCALE to the last key found by Swell Key
+void SwellChordMotionEditor::useSwellKey()
+{
+    const auto k = SwellLink::read();
+    if (! k.isValid())
+    {
+        swellKeyButton.setButtonText ("NO KEY YET");
+        swellKeyFlashUntil = Time::getMillisecondCounter() + 2500;
+        return;
+    }
+
+    auto set = [this] (const String& id, int index)
+    {
+        if (auto* p = proc.apvts.getParameter (id))
+        {
+            p->beginChangeGesture();
+            p->setValueNotifyingHost (p->convertTo0to1 ((float) index));
+            p->endChangeGesture();
+        }
+    };
+    set ("key", k.tonic);
+    set ("scale", k.minor ? 1 : 0);   // scaleNames: 0 = Major, 1 = Minor
+
+    swellKeyButton.setButtonText (ChordEngine::keyNames[k.tonic] + (k.minor ? " MIN" : " MAJ"));
+    swellKeyFlashUntil = Time::getMillisecondCounter() + 2500;
 }
 
 void SwellChordMotionEditor::setupBar (Slider& slider, const String& paramId)
@@ -520,6 +551,12 @@ void SwellChordMotionEditor::timerCallback()
     const auto playText = playButton.getToggleState() ? "STOP" : "PLAY";
     if (playButton.getButtonText() != playText)
         playButton.setButtonText (playText);
+
+    if (swellKeyFlashUntil != 0 && Time::getMillisecondCounter() > swellKeyFlashUntil)
+    {
+        swellKeyFlashUntil = 0;
+        swellKeyButton.setButtonText ("SWELL KEY");
+    }
 }
 
 void SwellChordMotionEditor::paint (Graphics& g)
@@ -552,7 +589,7 @@ void SwellChordMotionEditor::paint (Graphics& g)
 
     auto footer = getLocalBounds().removeFromBottom (24).reduced (22, 0);
     g.setFont (swellFont (11.5f));
-    g.drawText ("v1.1.0   |   by @sevyondatracks", footer, Justification::centredRight);
+    g.drawText ("v" + String (JucePlugin_VersionString) + "   |   by @sevyondatracks", footer, Justification::centredRight);
 }
 
 void SwellChordMotionEditor::resized()
@@ -585,12 +622,14 @@ void SwellChordMotionEditor::resized()
             row.removeFromLeft (14);
         };
         place (volLabel, 36, volSlider, 70);
-        place (instrLabel, 52, instrBox, 130);
-        place (styleLabel, 52, styleBox, 140);
+        place (instrLabel, 52, instrBox, 120);
+        place (styleLabel, 52, styleBox, 120);
         scaleLabel.setBounds (row.removeFromLeft (54).withTrimmedRight (8));
         keyBox.setBounds (row.removeFromLeft (64));
         row.removeFromLeft (6);
-        scaleBox.setBounds (row.removeFromLeft (190));
+        scaleBox.setBounds (row.removeFromLeft (170));
+        row.removeFromLeft (8);
+        swellKeyButton.setBounds (row);
     }
 
     area.removeFromTop (12);
