@@ -44,6 +44,9 @@ juce_add_plugin(SwellChordMotion
     VST3_CATEGORIES Instrument Generator
     AU_MAIN_TYPE kAudioUnitType_MusicDevice)
 
+juce_add_binary_data(SwellChordMotionData SOURCES
+    Resources/swell_logo.png)
+
 target_sources(SwellChordMotion PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp)
@@ -55,6 +58,7 @@ target_compile_definitions(SwellChordMotion PUBLIC
 
 target_link_libraries(SwellChordMotion
     PRIVATE
+        SwellChordMotionData
         juce::juce_audio_utils
     PUBLIC
         juce::juce_recommended_config_flags

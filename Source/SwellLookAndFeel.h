@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_gui_basics/juce_gui_basics.h>
+#include "BinaryData.h"
 
 // Shared Swell brand style: anthracite panels, orange accents
 namespace SwellColours
@@ -21,21 +22,12 @@ inline juce::Font swellFont (float size, bool bold = false)
     return juce::Font (juce::FontOptions (size, bold ? juce::Font::bold : juce::Font::plain));
 }
 
-// The Swell "S": three stacked waves
-inline void drawSwellLogo (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour colour)
+// The Swell logo (white on transparent, from Resources/swell_logo.png)
+inline void drawSwellLogo (juce::Graphics& g, juce::Rectangle<float> r)
 {
-    const float x = r.getX(), y = r.getY(), w = r.getWidth(), h = r.getHeight();
-    juce::Path p;
-
-    for (int k = 0; k < 3; ++k)
-    {
-        const float off = (float) k * h * 0.2f;
-        p.startNewSubPath (x + w * 0.92f, y + h * 0.1f + off);
-        p.cubicTo (x + w * 0.05f, y + off, x + w * 0.95f, y + h * 0.6f + off, x + w * 0.08f, y + h * 0.5f + off);
-    }
-
-    g.setColour (colour);
-    g.strokePath (p, juce::PathStrokeType (w * 0.09f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    const auto logo = juce::ImageCache::getFromMemory (BinaryData::swell_logo_png, BinaryData::swell_logo_pngSize);
+    g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
+    g.drawImage (logo, r, juce::RectanglePlacement::centred);
 }
 
 class SwellLookAndFeel : public juce::LookAndFeel_V4

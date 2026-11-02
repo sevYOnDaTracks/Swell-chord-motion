@@ -526,7 +526,7 @@ void SwellChordMotionEditor::paint (Graphics& g)
 {
     g.fillAll (background);
 
-    drawSwellLogo (g, headerArea.toFloat().withWidth (38.0f).withSizeKeepingCentre (38.0f, 38.0f), text);
+    drawSwellLogo (g, headerArea.toFloat().withWidth (40.0f).withSizeKeepingCentre (40.0f, 40.0f));
 
     g.setColour (text);
     g.setFont (swellFont (26.0f, true));
