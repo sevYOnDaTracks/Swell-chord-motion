@@ -4,26 +4,26 @@
 #include "PluginProcessor.h"
 #include "SwellLookAndFeel.h"
 
-// Plays a chord on the shared keyboard state while the mouse is held
+// Plays a chord in the current style while the mouse is held
 class ChordPreview
 {
 public:
-    explicit ChordPreview (juce::MidiKeyboardState& s) : state (s) {}
+    explicit ChordPreview (SwellChordMotionProcessor& p) : proc (p) {}
     ~ChordPreview() { stop(); }
 
     void start (const ChordEngine::ChordItem&);
     void stop();
 
 private:
-    juce::MidiKeyboardState& state;
-    std::vector<int> held;
+    SwellChordMotionProcessor& proc;
+    bool held = false;
 };
 
 // One cell of the "Chords in <scale>" palette: click to hear, drag (or double-click) to add
 class PaletteCell : public juce::Component
 {
 public:
-    PaletteCell (juce::MidiKeyboardState& s, bool isTriadRow) : preview (s), bold (isTriadRow) {}
+    PaletteCell (SwellChordMotionProcessor& p, bool isTriadRow) : preview (p), bold (isTriadRow) {}
 
     void setChord (std::optional<ChordEngine::ChordItem>);
     std::function<void (const ChordEngine::ChordItem&)> onAdd;

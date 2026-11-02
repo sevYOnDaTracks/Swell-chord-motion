@@ -134,6 +134,22 @@ void SwellChordMotionProcessor::clearProgression()
     progressionTree().removeAllChildren (&undoManager);
 }
 
+void SwellChordMotionProcessor::startPreview (const ChordEngine::ChordItem& chord)
+{
+    const SpinLock::ScopedLockType lock (previewLock);
+    sharedPreview = chord;
+    sharedPreview.beats = 4;   // one bar, so every style plays its whole pattern
+    sharedPreviewOn = true;
+    ++sharedPreviewVersion;
+}
+
+void SwellChordMotionProcessor::stopPreview()
+{
+    const SpinLock::ScopedLockType lock (previewLock);
+    sharedPreviewOn = false;
+    ++sharedPreviewVersion;
+}
+
 void SwellChordMotionProcessor::valueTreePropertyChanged (ValueTree& tree, const Identifier&)
 {
     // Parameter values also live in this tree; only chord edits matter here
@@ -223,6 +239,18 @@ void SwellChordMotionProcessor::processBlock (AudioBuffer<float>& buffer, MidiBu
         }
     }
 
+    {
+        const SpinLock::ScopedTryLockType lock (previewLock);
+        if (lock.isLocked() && sharedPreviewVersion != audioPreviewVersion)
+        {
+            audioPreviewVersion = sharedPreviewVersion;
+            previewOn = sharedPreviewOn;
+            previewProgression = { sharedPreview };
+            previewPpq = 0.0;
+            flushNotes (generated, 0);
+        }
+    }
+
     const int style = roundToInt (styleParam->load());
     if (style != lastStyle)
     {
@@ -275,7 +303,27 @@ void SwellChordMotionProcessor::processBlock (AudioBuffer<float>& buffer, MidiBu
 
     const double ppqPerSample = bpm / 60.0 / sr;
 
-    if (playing)
+    if (previewOn)
+    {
+        // A clicked chord plays in the chosen style at the current tempo, on the host's beat grid when it is playing
+        const double start = hostPlaying ? startPpq : previewPpq;
+        const double end = start + numSamples * ppqPerSample;
+        ChordEngine::collectEvents (start, end, previewProgression, style, events);
+
+        for (const auto& e : events)
+        {
+            const int sample = jlimit (0, numSamples - 1, (int) ((e.ppq - start) / ppqPerSample));
+            if (e.on)
+                noteOn (generated, e.note, sample);
+            else
+                noteOff (generated, e.note, sample);
+        }
+
+        previewPpq = end;
+        currentChord = -1;
+        playing = false;   // the progression restarts cleanly once the chord is released
+    }
+    else if (playing)
     {
         const double endPpq = startPpq + numSamples * ppqPerSample;
         const bool continuous = wasPlaying && std::abs (startPpq - lastEndPpq) < 0.05;
