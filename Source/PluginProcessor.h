@@ -44,6 +44,10 @@ public:
     void setChordBeats (int index, int beats);
     void clearProgression();
 
+    // Plays one chord in the current style while held (palette / lane clicks), message thread only
+    void startPreview (const ChordEngine::ChordItem&);
+    void stopPreview();
+
     // Writes the progression as a .mid file in the export folder and returns it
     juce::File exportMidiFile() const;
     juce::String getExportFileName() const;
@@ -88,6 +92,15 @@ private:
     int sharedVersion = 0;
     ChordEngine::Progression audioProgression;
     int audioVersion = -1;
+
+    // Previewed chord handed from the message thread to the audio thread
+    juce::SpinLock previewLock;
+    ChordEngine::ChordItem sharedPreview;
+    bool sharedPreviewOn = false;
+    int sharedPreviewVersion = 0, audioPreviewVersion = 0;
+    ChordEngine::Progression previewProgression;
+    bool previewOn = false;
+    double previewPpq = 0.0;
 
     std::array<int, 128> noteCounts {};
     std::vector<ChordEngine::NoteEvent> events;

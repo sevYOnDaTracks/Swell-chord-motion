@@ -32,18 +32,15 @@ std::optional<ChordEngine::ChordItem> parseChord (const String& description)
 //==============================================================================
 void ChordPreview::start (const ChordEngine::ChordItem& chord)
 {
-    stop();
-    held = ChordEngine::chordNotes (chord);
-    held.push_back (ChordEngine::bassNote (chord));
-    for (int n : held)
-        state.noteOn (1, n, 0.8f);
+    proc.startPreview (chord);
+    held = true;
 }
 
 void ChordPreview::stop()
 {
-    for (int n : held)
-        state.noteOff (1, n, 0.0f);
-    held.clear();
+    if (held)
+        proc.stopPreview();
+    held = false;
 }
 
 //==============================================================================
@@ -116,7 +113,7 @@ void PaletteCell::mouseDoubleClick (const MouseEvent&)
 }
 
 //==============================================================================
-ProgressionLane::ProgressionLane (SwellChordMotionProcessor& p) : proc (p), preview (p.keyboardState)
+ProgressionLane::ProgressionLane (SwellChordMotionProcessor& p) : proc (p), preview (p)
 {
     refresh();
 }
@@ -413,7 +410,7 @@ SwellChordMotionEditor::SwellChordMotionEditor (SwellChordMotionProcessor& p)
     {
         for (int degree = 0; degree < 7; ++degree)
         {
-            auto cell = std::make_unique<PaletteCell> (proc.keyboardState, row == 1);
+            auto cell = std::make_unique<PaletteCell> (proc, row == 1);
             cell->onAdd = [this] (const ChordEngine::ChordItem& c) { proc.insertChord (c, -1); };
             addAndMakeVisible (*cell);
             cells.push_back (std::move (cell));
