@@ -96,17 +96,25 @@ inline std::optional<ChordItem> paletteChord (int key, int scale, int degree, in
     return c;
 }
 
-// Close voicing with every root between G#2 and G3; bass two octaves under the chord root
-inline std::vector<int> chordNotes (const ChordItem& c)
+// Chord root pitch: the tonic of the key is the lowest root, so degrees I to VII always go up
+// (in F# minor, C#m and D sit above F#m). Tonics from G up start an octave lower to stay in range.
+inline int rootPitch (const ChordItem& c, int key)
 {
-    const int base = 48 + c.root;   // same octave for every root, so A and B sit above G
+    const int tonic = 48 + key - (key >= 7 ? 12 : 0);
+    return tonic + (c.root - key + 12) % 12;
+}
+
+// Close voicing above the root; bass two octaves under it
+inline std::vector<int> chordNotes (const ChordItem& c, int key)
+{
+    const int base = rootPitch (c, key);
     std::vector<int> notes;
     for (int i : c.intervals)
         notes.push_back (base + i);
     return notes;
 }
 
-inline int bassNote (const ChordItem& c) { return 36 + c.root; }
+inline int bassNote (const ChordItem& c, int key) { return rootPitch (c, key) - 12; }
 
 //==============================================================================
 enum Voice { fullChord = -1, bass = -2, bassFifth = -3 };
@@ -277,9 +285,10 @@ inline void addArpEvents (const std::vector<int>& notes, double chordStart, doub
     }
 }
 
-inline void addChordEvents (const ChordItem& chord, double chordStart, const Style& style, const ArpSettings& arp, std::vector<NoteEvent>& out)
+inline void addChordEvents (const ChordItem& chord, int key, double chordStart, const Style& style, const ArpSettings& arp,
+                            std::vector<NoteEvent>& out)
 {
-    const auto notes = chordNotes (chord);
+    const auto notes = chordNotes (chord, key);
     if (notes.empty())
         return;
 
@@ -287,7 +296,7 @@ inline void addChordEvents (const ChordItem& chord, double chordStart, const Sty
     if (useArp)
         addArpEvents (notes, chordStart, chord.beats, arpPatterns()[(size_t) (arp.pattern - 1)], arpStepBeats (arp.step), arp.mirror, out);
 
-    const int bassPitch = bassNote (chord);
+    const int bassPitch = bassNote (chord, key);
     const int chordLen = chord.beats * 4;
 
     for (int rep = 0; rep * style.length < chordLen; ++rep)
@@ -325,7 +334,7 @@ inline void addChordEvents (const ChordItem& chord, double chordStart, const Sty
 
 // All events whose time falls in [start, end), the progression looping forever.
 // Sorted with note-offs first on ties.
-inline void collectEvents (double start, double end, const Progression& prog, int styleIndex, const ArpSettings& arp,
+inline void collectEvents (double start, double end, const Progression& prog, int key, int styleIndex, const ArpSettings& arp,
                            std::vector<NoteEvent>& out)
 {
     out.clear();
@@ -343,7 +352,7 @@ inline void collectEvents (double start, double end, const Progression& prog, in
         for (const auto& chord : prog)
         {
             if (t + chord.beats >= start && t < end)
-                addChordEvents (chord, t, style, arp, out);
+                addChordEvents (chord, key, t, style, arp, out);
             t += chord.beats;
         }
     }

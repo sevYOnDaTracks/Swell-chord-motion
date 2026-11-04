@@ -36,6 +36,7 @@ SwellChordMotionProcessor::SwellChordMotionProcessor()
     bpmParam        = apvts.getRawParameterValue ("bpm");
     playParam       = apvts.getRawParameterValue ("play");
     effectParam     = apvts.getRawParameterValue ("effect");
+    keyParam        = apvts.getRawParameterValue ("key");
     arpParam        = apvts.getRawParameterValue ("arp");
     arpStepParam    = apvts.getRawParameterValue ("arpStep");
     arpMirrorParam  = apvts.getRawParameterValue ("arpMirror");
@@ -264,11 +265,13 @@ void SwellChordMotionProcessor::processBlock (AudioBuffer<float>& buffer, MidiBu
 
     const int style = roundToInt (styleParam->load());
     const auto arp = getArpSettings();
-    if (style != lastStyle || arp != lastArp)
+    const int key = roundToInt (keyParam->load());
+    if (style != lastStyle || arp != lastArp || key != lastKey)
     {
         flushNotes (generated, 0);
         lastStyle = style;
         lastArp = arp;
+        lastKey = key;
     }
 
     double bpm = bpmParam->load();
@@ -321,7 +324,7 @@ void SwellChordMotionProcessor::processBlock (AudioBuffer<float>& buffer, MidiBu
         // A clicked chord plays in the chosen style at the current tempo, on the host's beat grid when it is playing
         const double start = hostPlaying ? startPpq : previewPpq;
         const double end = start + numSamples * ppqPerSample;
-        ChordEngine::collectEvents (start, end, previewProgression, style, arp, events);
+        ChordEngine::collectEvents (start, end, previewProgression, key, style, arp, events);
 
         for (const auto& e : events)
         {
@@ -344,7 +347,7 @@ void SwellChordMotionProcessor::processBlock (AudioBuffer<float>& buffer, MidiBu
         if (! continuous)
             flushNotes (generated, 0);
 
-        ChordEngine::collectEvents (continuous ? lastEndPpq : startPpq, endPpq, audioProgression, style, arp, events);
+        ChordEngine::collectEvents (continuous ? lastEndPpq : startPpq, endPpq, audioProgression, key, style, arp, events);
 
         for (const auto& e : events)
         {
@@ -429,7 +432,7 @@ File SwellChordMotionProcessor::exportMidiFile() const
     const auto prog = getProgression();
     std::vector<ChordEngine::NoteEvent> evs;
     const double length = ChordEngine::totalBeats (prog);
-    ChordEngine::collectEvents (0.0, length, prog, getChoice ("style"), getArpSettings(), evs);
+    ChordEngine::collectEvents (0.0, length, prog, getChoice ("key"), getChoice ("style"), getArpSettings(), evs);
 
     constexpr int ticksPerBeat = 960;
     MidiMessageSequence seq;

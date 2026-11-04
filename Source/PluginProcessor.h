@@ -111,7 +111,8 @@ private:
     bool wasPlaying = false, internalRunning = false;
     int lastStyle = -1;
     ChordEngine::ArpSettings lastArp { -1, -1, false };
-    std::atomic<float> *arpParam, *arpStepParam, *arpMirrorParam;
+    int lastKey = -1;
+    std::atomic<float> *keyParam, *arpParam, *arpStepParam, *arpMirrorParam;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SwellChordMotionProcessor)
 };
