@@ -44,9 +44,10 @@ void ChordPreview::stop()
 }
 
 //==============================================================================
-void PaletteCell::setChord (std::optional<ChordEngine::ChordItem> c)
+void PaletteCell::setChord (std::optional<ChordEngine::ChordItem> c, const String& chordName)
 {
     chord = std::move (c);
+    name = chordName;
     setMouseCursor (chord ? MouseCursor::PointingHandCursor : MouseCursor::NormalCursor);
     repaint();
 }
@@ -69,7 +70,7 @@ void PaletteCell::paint (Graphics& g)
 
     g.setColour (pressed ? background : text);
     g.setFont (swellFont (15.0f, bold));
-    g.drawText (ChordEngine::chordName (*chord), r, Justification::centred);
+    g.drawText (name, r, Justification::centred);
 }
 
 void PaletteCell::mouseDown (const MouseEvent&)
@@ -214,7 +215,7 @@ void ProgressionLane::paint (Graphics& g)
 
         g.setColour (background);
         g.setFont (swellFont (15.0f, true));
-        g.drawFittedText (ChordEngine::chordName (items[(size_t) i]), r.toNearestInt().reduced (2, 0), Justification::centred, 1);
+        g.drawFittedText (proc.chordName (items[(size_t) i]), r.toNearestInt().reduced (2, 0), Justification::centred, 1);
     }
 
     if (insertMarker >= 0)
@@ -408,6 +409,11 @@ SwellChordMotionEditor::SwellChordMotionEditor (SwellChordMotionProcessor& p)
     addAndMakeVisible (arpMirrorButton);
     arpMirrorAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment> (proc.apvts, "arpMirror", arpMirrorButton);
 
+    inversionsButton.setClickingTogglesState (true);
+    inversionsButton.setTooltip ("Inversions: every chord stays in the same register (on by default, like OneMotion)");
+    addAndMakeVisible (inversionsButton);
+    inversionsAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment> (proc.apvts, "inversions", inversionsButton);
+
     swellKeyButton.onClick = [this] { useSwellKey(); };
     addAndMakeVisible (swellKeyButton);
 
@@ -527,10 +533,14 @@ void SwellChordMotionEditor::refreshPalette()
 
     for (int row = 0; row < 4; ++row)
         for (int degree = 0; degree < 7; ++degree)
-            cells[(size_t) (row * 7 + degree)]->setChord (ChordEngine::paletteChord (key, scale, degree, row));
+        {
+            const auto c = ChordEngine::paletteChord (key, scale, degree, row);
+            cells[(size_t) (row * 7 + degree)]->setChord (c, c ? ChordEngine::chordName (*c, key, scale) : String());
+        }
 
     paletteTitle = "CHORDS IN " + ChordEngine::keyNames[key] + " " + ChordEngine::scaleNames[scale].toUpperCase();
     repaint (paletteTitleArea);
+    lane.repaint();   // progression names follow the scale spelling
 }
 
 void SwellChordMotionEditor::updateEditButtons()
@@ -667,6 +677,7 @@ void SwellChordMotionEditor::resized()
         arpStepBox.setBounds (row.removeFromLeft (80));
         row.removeFromLeft (14);
         arpMirrorButton.setBounds (row.removeFromLeft (90));
+        inversionsButton.setBounds (row.removeFromRight (130));
     }
 
     area.removeFromTop (12);

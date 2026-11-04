@@ -52,7 +52,32 @@ inline juce::String chordSuffix (const std::vector<int>& iv)
     return "?";
 }
 
-inline juce::String chordName (const ChordItem& c) { return keyNames[c.root] + chordSuffix (c.intervals); }
+// Note spelling as in OneMotion: degree m of the scale takes the letter m steps after the key's letter
+// (F# minor = F# G# A B C# D E, D# major = D# E# F## G# A# B# C##). Notes outside the scale use flats.
+inline juce::String noteName (int pc, int key, int scale)
+{
+    static const char* outside[] { "C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B" };
+    static const int naturals[] { 0, 2, 4, 5, 7, 9, 11 };
+    static const int keyLetter[] { 0, 0, 1, 2, 2, 3, 3, 4, 5, 5, 6, 6 };   // letter of each entry of keyNames
+    static const char* accidentals[] { "bb", "b", "", "#", "##" };
+
+    pc = ((pc % 12) + 12) % 12;
+    key = juce::jlimit (0, 11, key);
+    const auto& steps = scaleSteps (scale);
+    for (int m = 0; m < 7; ++m)
+    {
+        if ((key + steps[(size_t) m]) % 12 != pc)
+            continue;
+        const int letter = (keyLetter[key] + m) % 7;
+        int acc = pc - naturals[letter];
+        if (acc < -2) acc += 12;
+        if (acc > 2)  acc -= 12;
+        return juce::String::charToString ("CDEFGAB"[letter]) + accidentals[acc + 2];
+    }
+    return outside[pc];
+}
+
+inline juce::String chordName (const ChordItem& c, int key, int scale) { return noteName (c.root, key, scale) + chordSuffix (c.intervals); }
 
 // One cell of the palette: row 0 = sus2, 1 = triad, 2 = sus4, 3 = seventh.
 // sus chords only exist when their notes belong to the scale (empty cell otherwise).
@@ -96,30 +121,91 @@ inline std::optional<ChordItem> paletteChord (int key, int scale, int degree, in
     return c;
 }
 
-// Chord root pitch: the tonic of the key is the lowest root, so degrees I to VII always go up
-// (in F# minor, C#m and D sit above F#m). Tonics from G up start an octave lower to stay in range.
-inline int rootPitch (const ChordItem& c, int key)
+// Voicing as in OneMotion (Chord tab, "Inversions" on by default): the chord is stacked in close position
+// from the lowest chord tone at or above G3, so every chord stays in the same register.
+// Inversions off: root position with the root between G3 and F#4. The bass sits between C2 and B2.
+struct Voicing
 {
-    const int tonic = 48 + key - (key >= 7 ? 12 : 0);
-    return tonic + (c.root - key + 12) % 12;
+    int key = 0, scale = 0;
+    bool inversions = true;
+};
+
+constexpr int chordTarget = 55;   // G3
+constexpr int maxChordTones = 17;
+
+// Tones of the chord starting at inversion b (b may go past the chord size: next octave),
+// stacked upwards. The root is left out when it would sit a half step above the previous note.
+inline std::vector<int> stackChord (const std::vector<int>& iv, int rootBase, int b)
+{
+    const int n = (int) iv.size();
+    std::vector<int> out;
+    int prev = -9999;
+    for (int q = 0; q < 40 && (int) out.size() < maxChordTones; ++q)
+    {
+        const int idx = b + q;
+        const int a = ((idx % n) + n) % n;
+        const int octave = (idx - a) / n;
+        const int note = iv[(size_t) a] + rootBase + 12 * octave;
+        if (a == 0 && note - prev == 1 && ! out.empty())
+            continue;
+        out.push_back (note);
+        prev = note;
+    }
+    return out;
 }
 
-// Close voicing above the root; bass two octaves under it
-inline std::vector<int> chordNotes (const ChordItem& c, int key)
+// Diatonic triad on the root of a sus chord: sus chords take the inversion of that triad
+inline std::vector<int> inversionReference (const ChordItem& c, const Voicing& v)
 {
-    const int base = rootPitch (c, key);
-    std::vector<int> notes;
-    for (int i : c.intervals)
-        notes.push_back (base + i);
-    return notes;
+    if (c.intervals != std::vector<int> { 0, 2, 7 } && c.intervals != std::vector<int> { 0, 5, 7 })
+        return c.intervals;
+
+    const auto& steps = scaleSteps (v.scale);
+    for (int d = 0; d < 7; ++d)
+    {
+        if ((v.key + steps[(size_t) d]) % 12 != c.root)
+            continue;
+        std::vector<int> iv;
+        for (int i = 0; i < 3; ++i)
+        {
+            const int idx = d + 2 * i;
+            iv.push_back (steps[(size_t) (idx % 7)] + 12 * (idx / 7) - steps[(size_t) d]);
+        }
+        return iv;
+    }
+    return c.intervals;
 }
 
-inline int bassNote (const ChordItem& c, int key) { return rootPitch (c, key) - 12; }
+// Every playable chord tone from the lowest one up (index i = arpeggio tone i + 1)
+inline std::vector<int> chordNotes (const ChordItem& c, const Voicing& v)
+{
+    if (c.intervals.empty())
+        return {};
+
+    int rootBase = 48 + v.key + (c.root - v.key + 12) % 12;
+    int b = 0;
+    if (v.inversions)
+    {
+        // Lowest inversion whose first note is at or above the target
+        const auto ref = inversionReference (c, v);
+        b = -3 * (int) ref.size();
+        while (stackChord (ref, rootBase, b).front() < chordTarget)
+            ++b;
+    }
+    else
+    {
+        while (rootBase < chordTarget)       rootBase += 12;
+        while (rootBase >= chordTarget + 12) rootBase -= 12;
+    }
+    return stackChord (c.intervals, rootBase, b);
+}
+
+inline int bassNote (const ChordItem& c) { return 36 + c.root; }
 
 //==============================================================================
 enum Voice { fullChord = -1, bass = -2, bassFifth = -3 };
 
-struct Hit { int pos, len, voice; };   // in 16th notes; voice >= 0 = chord tone index (wraps up octaves)
+struct Hit { int pos, len, voice; };   // in 16th notes; voice >= 0 = chord tone index (goes on up the stack)
 
 struct Style
 {
@@ -257,17 +343,17 @@ inline double totalBeats (const Progression& prog)
     return total;
 }
 
-// Chord tone k of the voicing; past the last tone it wraps up (or down when mirrored) an octave
-inline int chordTone (const std::vector<int>& notes, int k, bool mirror)
+// Chord tone k: up the stacked voicing, or from the top note down when mirrored
+inline int chordTone (const std::vector<int>& stack, int chordSize, int k, bool mirror)
 {
-    const int n = (int) notes.size();
-    if (mirror)
-        return notes[(size_t) (n - 1 - k % n)] - 12 * (k / n);
-    return notes[(size_t) (k % n)] + 12 * (k / n);
+    if (! mirror)
+        return k < (int) stack.size() ? stack[(size_t) k] : stack[(size_t) (k % chordSize)] + 12 * (k / chordSize);
+    const int n = juce::jmin (chordSize, (int) stack.size());
+    return stack[(size_t) (n - 1 - k % n)] - 12 * (k / n);
 }
 
 // The arpeggio restarts on every chord and loops until the chord ends
-inline void addArpEvents (const std::vector<int>& notes, double chordStart, double chordBeats,
+inline void addArpEvents (const std::vector<int>& notes, int chordSize, double chordStart, double chordBeats,
                           const ArpPattern& pattern, double stepBeats, bool mirror, std::vector<NoteEvent>& out)
 {
     const auto numSteps = (long long) std::ceil (chordBeats / stepBeats - 1.0e-6);
@@ -278,25 +364,26 @@ inline void addArpEvents (const std::vector<int>& notes, double chordStart, doub
         const double t1 = chordStart + std::min ((double) (i + 1) * stepBeats, chordBeats) - std::min (0.02, stepBeats * 0.1);
         for (int k : tones)
         {
-            const int note = chordTone (notes, k, mirror);
+            const int note = chordTone (notes, chordSize, k, mirror);
             out.push_back ({ t0, note, true });
             out.push_back ({ t1, note, false });
         }
     }
 }
 
-inline void addChordEvents (const ChordItem& chord, int key, double chordStart, const Style& style, const ArpSettings& arp,
-                            std::vector<NoteEvent>& out)
+inline void addChordEvents (const ChordItem& chord, const Voicing& voicing, double chordStart, const Style& style,
+                            const ArpSettings& arp, std::vector<NoteEvent>& out)
 {
-    const auto notes = chordNotes (chord, key);
+    const auto notes = chordNotes (chord, voicing);
+    const int chordSize = (int) chord.intervals.size();
     if (notes.empty())
         return;
 
     const bool useArp = arp.pattern > 0 && arp.pattern <= (int) arpPatterns().size();
     if (useArp)
-        addArpEvents (notes, chordStart, chord.beats, arpPatterns()[(size_t) (arp.pattern - 1)], arpStepBeats (arp.step), arp.mirror, out);
+        addArpEvents (notes, chordSize, chordStart, chord.beats, arpPatterns()[(size_t) (arp.pattern - 1)], arpStepBeats (arp.step), arp.mirror, out);
 
-    const int bassPitch = bassNote (chord, key);
+    const int bassPitch = bassNote (chord);
     const int chordLen = chord.beats * 4;
 
     for (int rep = 0; rep * style.length < chordLen; ++rep)
@@ -319,14 +406,14 @@ inline void addChordEvents (const ChordItem& chord, int key, double chordStart, 
 
             if (h.voice == fullChord)
             {
-                for (size_t i = 0; i < notes.size(); ++i)
-                    add (notes[i], style.strum ? (double) i * 0.03 : 0.0);
+                for (int i = 0; i < chordSize && i < (int) notes.size(); ++i)
+                    add (notes[(size_t) i], style.strum ? (double) i * 0.03 : 0.0);
             }
             else if (h.voice == bass)      add (bassPitch, 0.0);
             else if (h.voice == bassFifth) add (bassPitch + 7, 0.0);
             else
             {
-                add (chordTone (notes, h.voice, false), 0.0);
+                add (chordTone (notes, chordSize, h.voice, false), 0.0);
             }
         }
     }
@@ -334,7 +421,7 @@ inline void addChordEvents (const ChordItem& chord, int key, double chordStart, 
 
 // All events whose time falls in [start, end), the progression looping forever.
 // Sorted with note-offs first on ties.
-inline void collectEvents (double start, double end, const Progression& prog, int key, int styleIndex, const ArpSettings& arp,
+inline void collectEvents (double start, double end, const Progression& prog, const Voicing& voicing, int styleIndex, const ArpSettings& arp,
                            std::vector<NoteEvent>& out)
 {
     out.clear();
@@ -352,7 +439,7 @@ inline void collectEvents (double start, double end, const Progression& prog, in
         for (const auto& chord : prog)
         {
             if (t + chord.beats >= start && t < end)
-                addChordEvents (chord, key, t, style, arp, out);
+                addChordEvents (chord, voicing, t, style, arp, out);
             t += chord.beats;
         }
     }

@@ -26,6 +26,7 @@ Le fonctionnement s'inspire du [Chord Player de OneMotion](https://www.onemotion
 | **Chord progression** | Glisser-déposer, réorganisation des blocs, durée par accord (1 à 16 temps), Undo / Redo |
 | **20 styles** | Basic, Pop, Dance, Rock, Swing, Waltz, Reggae, Bossa Nova, Funk, Strumming, Arp, Melodic |
 | **Arpèges** | 21 patterns façon OneMotion (`Arp 1-3-2-4`, `Arp x-1-2`, `Arp 1-2-3-4-3-2`, `Split 13-2`…), step 1/4 → 1/16T, option Mirror. Remplace la partie accords du style, la basse du style est gardée |
+| **Comme OneMotion** | Noms d'accords écrits selon la gamme (F# mineur → G#dim, D# majeur → F##m), accords joués avec inversions entre G3 et F#4 (bouton INVERSIONS, actif par défaut), basse entre C2 et B2 |
 | **Instruments intégrés** | Piano, E-Piano, Organ, Pad, Pluck, Strings + reverb (Room, Hall, Church) |
 | **MIDI Out** | Pilote tes propres VST avec la progression |
 | **Synchro DAW** | Suit le tempo et la lecture de ton DAW |

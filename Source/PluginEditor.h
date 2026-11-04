@@ -25,7 +25,7 @@ class PaletteCell : public juce::Component
 public:
     PaletteCell (SwellChordMotionProcessor& p, bool isTriadRow) : preview (p), bold (isTriadRow) {}
 
-    void setChord (std::optional<ChordEngine::ChordItem>);
+    void setChord (std::optional<ChordEngine::ChordItem>, const juce::String& name);
     std::function<void (const ChordEngine::ChordItem&)> onAdd;
 
     void paint (juce::Graphics&) override;
@@ -39,6 +39,7 @@ public:
 private:
     ChordPreview preview;
     std::optional<ChordEngine::ChordItem> chord;
+    juce::String name;
     bool bold, pressed = false;
 };
 
@@ -124,8 +125,8 @@ private:
     // Arpeggio (replaces the chord part of the style, the style keeps its bass)
     juce::ComboBox arpBox, arpStepBox;
     juce::Label arpLabel, arpStepLabel;
-    juce::TextButton arpMirrorButton { "MIRROR" };
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> arpMirrorAttachment;   // replaces the tempo slider while the host drives the tempo
+    juce::TextButton arpMirrorButton { "MIRROR" }, inversionsButton { "INVERSIONS" };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> arpMirrorAttachment, inversionsAttachment;   // replaces the tempo slider while the host drives the tempo
 
     // Takes the key found by Swell Key (see SwellLink.h)
     juce::TextButton swellKeyButton { "SWELL KEY" };

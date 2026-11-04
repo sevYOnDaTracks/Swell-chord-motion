@@ -36,6 +36,8 @@ public:
 
     int getChoice (const juce::String& paramId) const { return juce::roundToInt (apvts.getRawParameterValue (paramId)->load()); }
     ChordEngine::ArpSettings getArpSettings() const;
+    ChordEngine::Voicing getVoicing() const;
+    juce::String chordName (const ChordEngine::ChordItem& c) const { const auto v = getVoicing(); return ChordEngine::chordName (c, v.key, v.scale); }
 
     // Chord progression editing, message thread only (undoable)
     ChordEngine::Progression getProgression() const;
@@ -111,8 +113,8 @@ private:
     bool wasPlaying = false, internalRunning = false;
     int lastStyle = -1;
     ChordEngine::ArpSettings lastArp { -1, -1, false };
-    int lastKey = -1;
-    std::atomic<float> *keyParam, *arpParam, *arpStepParam, *arpMirrorParam;
+    ChordEngine::Voicing lastVoicing { -1, -1, false };
+    std::atomic<float> *keyParam, *scaleParam, *inversionsParam, *arpParam, *arpStepParam, *arpMirrorParam;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SwellChordMotionProcessor)
 };
