@@ -119,7 +119,13 @@ private:
     juce::Slider volSlider, bpmSlider;
     juce::ComboBox instrBox, styleBox, keyBox, scaleBox, effectBox;
     juce::Label volLabel, instrLabel, styleLabel, scaleLabel, effectLabel, bpmLabel;
-    juce::Label hostBpmDisplay;   // replaces the tempo slider while the host drives the tempo
+    juce::Label hostBpmDisplay;
+
+    // Arpeggio (replaces the chord part of the style, the style keeps its bass)
+    juce::ComboBox arpBox, arpStepBox;
+    juce::Label arpLabel, arpStepLabel;
+    juce::TextButton arpMirrorButton { "MIRROR" };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> arpMirrorAttachment;   // replaces the tempo slider while the host drives the tempo
 
     // Takes the key found by Swell Key (see SwellLink.h)
     juce::TextButton swellKeyButton { "SWELL KEY" };

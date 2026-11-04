@@ -382,6 +382,8 @@ SwellChordMotionEditor::SwellChordMotionEditor (SwellChordMotionProcessor& p)
     setupCaption (scaleLabel, "SCALE");
     setupCaption (effectLabel, "FX");
     setupCaption (bpmLabel, "TEMPO");
+    setupCaption (arpLabel, "ARP");
+    setupCaption (arpStepLabel, "STEP");
 
     setupBar (volSlider, "vol");
     setupBar (bpmSlider, "bpm");
@@ -396,6 +398,15 @@ SwellChordMotionEditor::SwellChordMotionEditor (SwellChordMotionProcessor& p)
     setupCombo (keyBox, ChordEngine::keyNames, "key");
     setupCombo (scaleBox, ChordEngine::scaleNames, "scale");
     setupCombo (effectBox, Instruments::effectNames, "effect");
+    setupCombo (arpBox, ChordEngine::arpNames(), "arp");
+    setupCombo (arpStepBox, ChordEngine::arpStepNames, "arpStep");
+    arpBox.setTooltip ("Arpeggio pattern: 1 = lowest chord note, x = rest. Replaces the chord part of the style, keeps its bass");
+    arpStepBox.setTooltip ("Length of each arpeggio step");
+
+    arpMirrorButton.setClickingTogglesState (true);
+    arpMirrorButton.setTooltip ("Count the notes from the top of the chord down");
+    addAndMakeVisible (arpMirrorButton);
+    arpMirrorAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment> (proc.apvts, "arpMirror", arpMirrorButton);
 
     swellKeyButton.onClick = [this] { useSwellKey(); };
     addAndMakeVisible (swellKeyButton);
@@ -445,7 +456,7 @@ SwellChordMotionEditor::SwellChordMotionEditor (SwellChordMotionProcessor& p)
     addAndMakeVisible (lane);
     addAndMakeVisible (midiButton);
 
-    setSize (900, 540);
+    setSize (900, 580);
     refreshPalette();
     updateEditButtons();
     startTimerHz (30);
@@ -644,6 +655,18 @@ void SwellChordMotionEditor::resized()
         scaleBox.setBounds (row.removeFromLeft (170));
         row.removeFromLeft (8);
         swellKeyButton.setBounds (row);
+    }
+
+    area.removeFromTop (10);
+    {
+        auto row = area.removeFromTop (30);
+        arpLabel.setBounds (row.removeFromLeft (36).withTrimmedRight (8));
+        arpBox.setBounds (row.removeFromLeft (220));
+        row.removeFromLeft (14);
+        arpStepLabel.setBounds (row.removeFromLeft (52).withTrimmedRight (8));
+        arpStepBox.setBounds (row.removeFromLeft (80));
+        row.removeFromLeft (14);
+        arpMirrorButton.setBounds (row.removeFromLeft (90));
     }
 
     area.removeFromTop (12);

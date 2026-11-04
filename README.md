@@ -25,6 +25,7 @@ Le fonctionnement s'inspire du [Chord Player de OneMotion](https://www.onemotion
 | **12 tonalités × 8 gammes** | Major, Minor, Harmonic major/minor, Melodic minor, Double harmonic major, Neapolitan major/minor |
 | **Chord progression** | Glisser-déposer, réorganisation des blocs, durée par accord (1 à 16 temps), Undo / Redo |
 | **20 styles** | Basic, Pop, Dance, Rock, Swing, Waltz, Reggae, Bossa Nova, Funk, Strumming, Arp, Melodic |
+| **Arpèges** | 21 patterns façon OneMotion (`Arp 1-3-2-4`, `Arp x-1-2`, `Arp 1-2-3-4-3-2`, `Split 13-2`…), step 1/4 → 1/16T, option Mirror. Remplace la partie accords du style, la basse du style est gardée |
 | **Instruments intégrés** | Piano, E-Piano, Organ, Pad, Pluck, Strings + reverb (Room, Hall, Church) |
 | **MIDI Out** | Pilote tes propres VST avec la progression |
 | **Synchro DAW** | Suit le tempo et la lecture de ton DAW |
@@ -41,6 +42,7 @@ Le fonctionnement s'inspire du [Chord Player de OneMotion](https://www.onemotion
    - **clic droit** sur un bloc pour régler sa durée, le dupliquer ou le supprimer ;
    - **- / +** pour changer la durée de l'accord sélectionné.
 5. **STYLE** et **INSTR** : choisis le rythme et le son, puis **PLAY**.
+   - **ARP** : choisis un arpège (`1` = note la plus grave de l'accord, `x` = silence ; au-delà du nombre de notes on monte d'une octave). **STEP** règle la durée de chaque note, **MIRROR** compte les notes depuis le haut. `Off (style)` revient aux accords du style.
 6. **DRAG MIDI** : glisse le bouton dans ton DAW. Un simple clic ouvre le dossier des exports (`Documents/Swell Chord Motion`).
 
 > Astuce FL Studio : mets **INSTR** sur `MIDI Out`, puis route la sortie MIDI du plugin vers n'importe quel instrument.

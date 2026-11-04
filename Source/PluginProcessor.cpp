@@ -36,6 +36,9 @@ SwellChordMotionProcessor::SwellChordMotionProcessor()
     bpmParam        = apvts.getRawParameterValue ("bpm");
     playParam       = apvts.getRawParameterValue ("play");
     effectParam     = apvts.getRawParameterValue ("effect");
+    arpParam        = apvts.getRawParameterValue ("arp");
+    arpStepParam    = apvts.getRawParameterValue ("arpStep");
+    arpMirrorParam  = apvts.getRawParameterValue ("arpMirror");
 
     for (int i = 0; i < 16; ++i)
         synth.addVoice (new SwellVoice (instrumentParam));
@@ -64,6 +67,9 @@ AudioProcessorValueTreeState::ParameterLayout SwellChordMotionProcessor::createL
     layout.add (std::make_unique<AudioParameterInt> (ParameterID { "vol", 1 }, "Vol", 0, 100, 80));
     choice ("instr", "Instr", Instruments::names, Instruments::piano);
     choice ("style", "Style", ChordEngine::styleNames(), 5);
+    choice ("arp", "Arpeggio", ChordEngine::arpNames(), 0);
+    choice ("arpStep", "Arp step", ChordEngine::arpStepNames, 1);
+    layout.add (std::make_unique<AudioParameterBool> (ParameterID { "arpMirror", 1 }, "Arp mirror", false));
     choice ("key", "Key", ChordEngine::keyNames, 0);
     choice ("scale", "Scale", ChordEngine::scaleNames, 0);
     choice ("effect", "Effect", Instruments::effectNames, 1);
@@ -71,6 +77,11 @@ AudioProcessorValueTreeState::ParameterLayout SwellChordMotionProcessor::createL
                     AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) { return String (roundToInt (v)) + " BPM"; })));
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "play", 1 }, "Play", false));
     return layout;
+}
+
+ChordEngine::ArpSettings SwellChordMotionProcessor::getArpSettings() const
+{
+    return { roundToInt (arpParam->load()), roundToInt (arpStepParam->load()), arpMirrorParam->load() > 0.5f };
 }
 
 //==============================================================================
@@ -252,10 +263,12 @@ void SwellChordMotionProcessor::processBlock (AudioBuffer<float>& buffer, MidiBu
     }
 
     const int style = roundToInt (styleParam->load());
-    if (style != lastStyle)
+    const auto arp = getArpSettings();
+    if (style != lastStyle || arp != lastArp)
     {
         flushNotes (generated, 0);
         lastStyle = style;
+        lastArp = arp;
     }
 
     double bpm = bpmParam->load();
@@ -308,7 +321,7 @@ void SwellChordMotionProcessor::processBlock (AudioBuffer<float>& buffer, MidiBu
         // A clicked chord plays in the chosen style at the current tempo, on the host's beat grid when it is playing
         const double start = hostPlaying ? startPpq : previewPpq;
         const double end = start + numSamples * ppqPerSample;
-        ChordEngine::collectEvents (start, end, previewProgression, style, events);
+        ChordEngine::collectEvents (start, end, previewProgression, style, arp, events);
 
         for (const auto& e : events)
         {
@@ -331,7 +344,7 @@ void SwellChordMotionProcessor::processBlock (AudioBuffer<float>& buffer, MidiBu
         if (! continuous)
             flushNotes (generated, 0);
 
-        ChordEngine::collectEvents (continuous ? lastEndPpq : startPpq, endPpq, audioProgression, style, events);
+        ChordEngine::collectEvents (continuous ? lastEndPpq : startPpq, endPpq, audioProgression, style, arp, events);
 
         for (const auto& e : events)
         {
@@ -416,7 +429,7 @@ File SwellChordMotionProcessor::exportMidiFile() const
     const auto prog = getProgression();
     std::vector<ChordEngine::NoteEvent> evs;
     const double length = ChordEngine::totalBeats (prog);
-    ChordEngine::collectEvents (0.0, length, prog, getChoice ("style"), evs);
+    ChordEngine::collectEvents (0.0, length, prog, getChoice ("style"), getArpSettings(), evs);
 
     constexpr int ticksPerBeat = 960;
     MidiMessageSequence seq;

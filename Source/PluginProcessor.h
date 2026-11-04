@@ -35,6 +35,7 @@ public:
     void setStateInformation (const void*, int) override;
 
     int getChoice (const juce::String& paramId) const { return juce::roundToInt (apvts.getRawParameterValue (paramId)->load()); }
+    ChordEngine::ArpSettings getArpSettings() const;
 
     // Chord progression editing, message thread only (undoable)
     ChordEngine::Progression getProgression() const;
@@ -109,6 +110,8 @@ private:
     double internalPpq = 0.0, lastEndPpq = 0.0;
     bool wasPlaying = false, internalRunning = false;
     int lastStyle = -1;
+    ChordEngine::ArpSettings lastArp { -1, -1, false };
+    std::atomic<float> *arpParam, *arpStepParam, *arpMirrorParam;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SwellChordMotionProcessor)
 };

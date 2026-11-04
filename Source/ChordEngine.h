@@ -163,6 +163,77 @@ inline juce::StringArray styleNames()
 }
 
 //==============================================================================
+// Arpeggio patterns (Chord tab of OneMotion). Each step is a list of chord tones, "1" = lowest note,
+// numbers above the chord size wrap up an octave; "." is a rest, "13" plays tones 1 and 3 together.
+struct ArpPattern
+{
+    juce::String name;
+    std::vector<std::vector<int>> steps;   // 0-based tone indices per step, empty = rest
+};
+
+inline const std::vector<ArpPattern>& arpPatterns()
+{
+    static const std::vector<ArpPattern> list = []
+    {
+        const char* defs[] {
+            "1 2", ". 1 2", "1 2 3", "1 3 2", ". 1 2 1", ". 1 2 3",
+            "1 2 3 2", "1 2 3 4", "1 2 4 3", "1 3 2 3", "1 3 2 4", "1 4 3 2", "2 1 2 3",
+            "1 2 3 4 3 2", "1 2 3 1 2 4", "1 2 3 2 3 2", "1 3 2 3 4 3", "2 1 2 3 4 3", "1 3 2 3 4 3 2 3",
+            "13 2", "23 1"
+        };
+
+        std::vector<ArpPattern> out;
+        for (auto* def : defs)
+        {
+            ArpPattern p;
+            juce::StringArray parts;
+            bool split = false;
+            for (const auto& token : juce::StringArray::fromTokens (def, " ", {}))
+            {
+                std::vector<int> tones;
+                if (token != ".")
+                    for (auto ch : token)
+                        tones.push_back ((int) (ch - '1'));
+                split = split || tones.size() > 1;
+                p.steps.push_back (tones);
+                parts.add (token == "." ? "x" : token);
+            }
+            p.name = (split ? "Split " : "Arp ") + parts.joinIntoString ("-");
+            out.push_back (std::move (p));
+        }
+        return out;
+    }();
+    return list;
+}
+
+// Index 0 = "Off": the style plays its own chord part
+inline juce::StringArray arpNames()
+{
+    juce::StringArray names { "Off (style)" };
+    for (const auto& a : arpPatterns())
+        names.add (a.name);
+    return names;
+}
+
+inline const juce::StringArray arpStepNames { "1/4", "1/8", "1/16", "1/8T", "1/16T" };
+
+inline double arpStepBeats (int index)
+{
+    static const double beats[] { 1.0, 0.5, 0.25, 1.0 / 3.0, 1.0 / 6.0 };
+    return beats[juce::jlimit (0, 4, index)];
+}
+
+struct ArpSettings
+{
+    int pattern = 0;     // 0 = off, otherwise arpPatterns()[pattern - 1]
+    int step = 1;        // index in arpStepNames
+    bool mirror = false; // count tones from the top note down
+
+    bool operator== (const ArpSettings& o) const { return pattern == o.pattern && step == o.step && mirror == o.mirror; }
+    bool operator!= (const ArpSettings& o) const { return ! (*this == o); }
+};
+
+//==============================================================================
 struct NoteEvent
 {
     double ppq;
@@ -178,11 +249,43 @@ inline double totalBeats (const Progression& prog)
     return total;
 }
 
-inline void addChordEvents (const ChordItem& chord, double chordStart, const Style& style, std::vector<NoteEvent>& out)
+// Chord tone k of the voicing; past the last tone it wraps up (or down when mirrored) an octave
+inline int chordTone (const std::vector<int>& notes, int k, bool mirror)
+{
+    const int n = (int) notes.size();
+    if (mirror)
+        return notes[(size_t) (n - 1 - k % n)] - 12 * (k / n);
+    return notes[(size_t) (k % n)] + 12 * (k / n);
+}
+
+// The arpeggio restarts on every chord and loops until the chord ends
+inline void addArpEvents (const std::vector<int>& notes, double chordStart, double chordBeats,
+                          const ArpPattern& pattern, double stepBeats, bool mirror, std::vector<NoteEvent>& out)
+{
+    const auto numSteps = (long long) std::ceil (chordBeats / stepBeats - 1.0e-6);
+    for (long long i = 0; i < numSteps; ++i)
+    {
+        const auto& tones = pattern.steps[(size_t) (i % (long long) pattern.steps.size())];
+        const double t0 = chordStart + (double) i * stepBeats;
+        const double t1 = chordStart + std::min ((double) (i + 1) * stepBeats, chordBeats) - std::min (0.02, stepBeats * 0.1);
+        for (int k : tones)
+        {
+            const int note = chordTone (notes, k, mirror);
+            out.push_back ({ t0, note, true });
+            out.push_back ({ t1, note, false });
+        }
+    }
+}
+
+inline void addChordEvents (const ChordItem& chord, double chordStart, const Style& style, const ArpSettings& arp, std::vector<NoteEvent>& out)
 {
     const auto notes = chordNotes (chord);
     if (notes.empty())
         return;
+
+    const bool useArp = arp.pattern > 0 && arp.pattern <= (int) arpPatterns().size();
+    if (useArp)
+        addArpEvents (notes, chordStart, chord.beats, arpPatterns()[(size_t) (arp.pattern - 1)], arpStepBeats (arp.step), arp.mirror, out);
 
     const int bassPitch = bassNote (chord);
     const int chordLen = chord.beats * 4;
@@ -194,6 +297,8 @@ inline void addChordEvents (const ChordItem& chord, double chordStart, const Sty
             const int on = rep * style.length + h.pos;
             if (on >= chordLen)
                 continue;
+            if (useArp && h.voice != bass && h.voice != bassFifth)
+                continue;   // the arpeggio replaces the chord part, the style keeps its bass
 
             const double t0 = chordStart + on / 4.0;
             const double t1 = chordStart + std::min (on + h.len, chordLen) / 4.0 - 0.02;
@@ -212,8 +317,7 @@ inline void addChordEvents (const ChordItem& chord, double chordStart, const Sty
             else if (h.voice == bassFifth) add (bassPitch + 7, 0.0);
             else
             {
-                const int n = (int) notes.size();
-                add (notes[(size_t) (h.voice % n)] + 12 * (h.voice / n), 0.0);
+                add (chordTone (notes, h.voice, false), 0.0);
             }
         }
     }
@@ -221,7 +325,8 @@ inline void addChordEvents (const ChordItem& chord, double chordStart, const Sty
 
 // All events whose time falls in [start, end), the progression looping forever.
 // Sorted with note-offs first on ties.
-inline void collectEvents (double start, double end, const Progression& prog, int styleIndex, std::vector<NoteEvent>& out)
+inline void collectEvents (double start, double end, const Progression& prog, int styleIndex, const ArpSettings& arp,
+                           std::vector<NoteEvent>& out)
 {
     out.clear();
     const double loop = totalBeats (prog);
@@ -238,7 +343,7 @@ inline void collectEvents (double start, double end, const Progression& prog, in
         for (const auto& chord : prog)
         {
             if (t + chord.beats >= start && t < end)
-                addChordEvents (chord, t, style, out);
+                addChordEvents (chord, t, style, arp, out);
             t += chord.beats;
         }
     }
