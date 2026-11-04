@@ -1096,7 +1096,8 @@ inline std::vector<NoteEvent> renderProgression (const Progression& prog, const 
         const int vel = juce::jlimit (1, 127, (int) std::lround (127.0 * n.velocity));
         const int channel = n.part + 1;
         out.push_back ({ n.start - from, n.pitch, true, vel, NoteEvent::noteEvent, channel });
-        out.push_back ({ end - from, n.pitch, false, 0, NoteEvent::noteEvent, channel });
+        // Ends stay inside the loop, so a note held to the end still gets its note-off
+        out.push_back ({ std::min (end, to - 1.0e-3) - from, n.pitch, false, 0, NoteEvent::noteEvent, channel });
     }
 
     const double from = keptLoop * loopEnd, to = from + loopEnd;
