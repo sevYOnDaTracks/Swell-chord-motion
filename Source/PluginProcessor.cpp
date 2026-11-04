@@ -44,7 +44,7 @@ SwellChordMotionProcessor::SwellChordMotionProcessor()
     arpMirrorParam  = apvts.getRawParameterValue ("arpMirror");
 
     for (int i = 0; i < 16; ++i)
-        synth.addVoice (new SwellVoice (instrumentParam));
+        synth.addVoice (new SwellVoice (instrumentParam, synth.channelState));
     synth.addSound (new SwellSound());
 
     events.reserve (4096);
@@ -69,7 +69,7 @@ AudioProcessorValueTreeState::ParameterLayout SwellChordMotionProcessor::createL
 
     layout.add (std::make_unique<AudioParameterInt> (ParameterID { "vol", 1 }, "Vol", 0, 100, 80));
     choice ("instr", "Instr", Instruments::names, Instruments::piano);
-    choice ("style", "Style", ChordEngine::styleNames(), 5);
+    choice ("style", "Style", ChordEngine::styleNames(), 0);
     choice ("arp", "Arpeggio", ChordEngine::arpNames(), 0);
     choice ("arpStep", "Arp step", ChordEngine::arpStepNames, 1);
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "arpMirror", 1 }, "Arp mirror", false));
@@ -158,7 +158,7 @@ void SwellChordMotionProcessor::startPreview (const ChordEngine::ChordItem& chor
 {
     const SpinLock::ScopedLockType lock (previewLock);
     sharedPreview = chord;
-    sharedPreview.beats = 4;   // one bar, so every style plays its whole pattern
+    sharedPreview.beats = 16;   // long enough for the 4-bar patterns
     sharedPreviewOn = true;
     ++sharedPreviewVersion;
 }
@@ -197,7 +197,8 @@ void SwellChordMotionProcessor::prepareToPlay (double sampleRate, int)
     reverb.reset();
     gain.reset (sampleRate, 0.05);
     generated.ensureSize (4096);
-    noteCounts.fill (0);
+    for (auto& counts : noteCounts)
+        counts.fill (0);
     keyboardState.reset();
     wasPlaying = internalRunning = false;
 }
@@ -208,33 +209,57 @@ bool SwellChordMotionProcessor::isBusesLayoutSupported (const BusesLayout& layou
     return out == AudioChannelSet::stereo() || out == AudioChannelSet::mono();
 }
 
-void SwellChordMotionProcessor::noteOn (MidiBuffer& buffer, int note, int sample)
+void SwellChordMotionProcessor::noteOn (MidiBuffer& buffer, int channel, int note, int velocity, int sample)
 {
     if (! isPositiveAndBelow (note, 128))
         return;
 
-    ++noteCounts[(size_t) note];
-    buffer.addEvent (MidiMessage::noteOn (1, note, (uint8) 100), sample);
+    channel = jlimit (1, 2, channel);
+    ++noteCounts[(size_t) channel - 1][(size_t) note];
+    buffer.addEvent (MidiMessage::noteOn (channel, note, (uint8) jlimit (1, 127, velocity)), sample);
 }
 
-void SwellChordMotionProcessor::noteOff (MidiBuffer& buffer, int note, int sample)
+void SwellChordMotionProcessor::emit (MidiBuffer& buffer, const ChordEngine::NoteEvent& e, int sample)
 {
-    if (! isPositiveAndBelow (note, 128) || noteCounts[(size_t) note] == 0)
+    using Kind = ChordEngine::NoteEvent::Kind;
+    if (e.kind == Kind::expression)
+        buffer.addEvent (MidiMessage::controllerEvent (e.channel, 11, e.value), sample);
+    else if (e.kind == Kind::pitchBend)
+        buffer.addEvent (MidiMessage::pitchWheel (e.channel, e.value), sample);
+    else if (e.on)
+        noteOn (buffer, e.channel, e.note, e.value, sample);
+    else
+        noteOff (buffer, e.channel, e.note, sample);
+}
+
+void SwellChordMotionProcessor::noteOff (MidiBuffer& buffer, int channel, int note, int sample)
+{
+    channel = jlimit (1, 2, channel);
+    auto& counts = noteCounts[(size_t) channel - 1];
+    if (! isPositiveAndBelow (note, 128) || counts[(size_t) note] == 0)
         return;
 
-    if (--noteCounts[(size_t) note] == 0)
-        buffer.addEvent (MidiMessage::noteOff (1, note), sample);
+    if (--counts[(size_t) note] == 0)
+        buffer.addEvent (MidiMessage::noteOff (channel, note), sample);
 }
 
 void SwellChordMotionProcessor::flushNotes (MidiBuffer& buffer, int sample)
 {
-    for (int note = 0; note < 128; ++note)
+    for (int channel = 1; channel <= 2; ++channel)
     {
-        if (noteCounts[(size_t) note] > 0)
+        auto& counts = noteCounts[(size_t) channel - 1];
+        for (int note = 0; note < 128; ++note)
         {
-            noteCounts[(size_t) note] = 0;
-            buffer.addEvent (MidiMessage::noteOff (1, note), sample);
+            if (counts[(size_t) note] > 0)
+            {
+                counts[(size_t) note] = 0;
+                buffer.addEvent (MidiMessage::noteOff (channel, note), sample);
+            }
         }
+
+        // Mod styles move the expression and the pitch: put them back
+        buffer.addEvent (MidiMessage::controllerEvent (channel, 11, 127), sample);
+        buffer.addEvent (MidiMessage::pitchWheel (channel, 8192), sample);
     }
 }
 
@@ -334,16 +359,10 @@ void SwellChordMotionProcessor::processBlock (AudioBuffer<float>& buffer, MidiBu
         // A clicked chord plays in the chosen style at the current tempo, on the host's beat grid when it is playing
         const double start = hostPlaying ? startPpq : previewPpq;
         const double end = start + numSamples * ppqPerSample;
-        ChordEngine::collectEvents (start, end, previewProgression, voicing, style, arp, events);
+        previewRenderer.collect (start, end, previewProgression, voicing, style, arp, events);
 
         for (const auto& e : events)
-        {
-            const int sample = jlimit (0, numSamples - 1, (int) ((e.ppq - start) / ppqPerSample));
-            if (e.on)
-                noteOn (generated, e.note, sample);
-            else
-                noteOff (generated, e.note, sample);
-        }
+            emit (generated, e, jlimit (0, numSamples - 1, (int) ((e.ppq - start) / ppqPerSample)));
 
         previewPpq = end;
         currentChord = -1;
@@ -357,22 +376,16 @@ void SwellChordMotionProcessor::processBlock (AudioBuffer<float>& buffer, MidiBu
         if (! continuous)
             flushNotes (generated, 0);
 
-        ChordEngine::collectEvents (continuous ? lastEndPpq : startPpq, endPpq, audioProgression, voicing, style, arp, events);
+        audioRenderer.collect (continuous ? lastEndPpq : startPpq, endPpq, audioProgression, voicing, style, arp, events);
 
         for (const auto& e : events)
-        {
-            const int sample = jlimit (0, numSamples - 1, (int) ((e.ppq - startPpq) / ppqPerSample));
-            if (e.on)
-                noteOn (generated, e.note, sample);
-            else
-                noteOff (generated, e.note, sample);
-        }
+            emit (generated, e, jlimit (0, numSamples - 1, (int) ((e.ppq - startPpq) / ppqPerSample)));
 
         lastEndPpq = endPpq;
         if (! hostPlaying)
             internalPpq = endPpq;
 
-        currentChord = ChordEngine::chordAt (audioProgression, startPpq);
+        currentChord = ChordEngine::chordAtTime (audioProgression, style, startPpq);
     }
     else
     {
@@ -441,16 +454,25 @@ File SwellChordMotionProcessor::exportMidiFile() const
 {
     const auto prog = getProgression();
     std::vector<ChordEngine::NoteEvent> evs;
-    const double length = ChordEngine::totalBeats (prog);
-    ChordEngine::collectEvents (0.0, length, prog, getVoicing(), getChoice ("style"), getArpSettings(), evs);
+    const double length = ChordEngine::loopLength (prog, getChoice ("style"));
+    ChordEngine::StyleRenderer renderer;
+    renderer.collect (0.0, length, prog, getVoicing(), getChoice ("style"), getArpSettings(), evs);
 
     constexpr int ticksPerBeat = 960;
+    const auto& ts = ChordEngine::styleDef (getChoice ("style")).time;
     MidiMessageSequence seq;
     seq.addEvent (MidiMessage::tempoMetaEvent (roundToInt (60000000.0 / currentBpm.load())), 0.0);
-    seq.addEvent (MidiMessage::timeSignatureMetaEvent (4, 4), 0.0);
+    seq.addEvent (MidiMessage::timeSignatureMetaEvent (ts.numerator, ts.denominator), 0.0);
 
+    using Kind = ChordEngine::NoteEvent::Kind;
     for (const auto& e : evs)
-        seq.addEvent (e.on ? MidiMessage::noteOn (1, e.note, (uint8) 100) : MidiMessage::noteOff (1, e.note), e.ppq * ticksPerBeat);
+    {
+        const double t = e.ppq * ticksPerBeat;
+        if (e.kind == Kind::expression)     seq.addEvent (MidiMessage::controllerEvent (e.channel, 11, e.value), t);
+        else if (e.kind == Kind::pitchBend) seq.addEvent (MidiMessage::pitchWheel (e.channel, e.value), t);
+        else if (e.on)                      seq.addEvent (MidiMessage::noteOn (e.channel, e.note, (uint8) jlimit (1, 127, e.value)), t);
+        else                                seq.addEvent (MidiMessage::noteOff (e.channel, e.note), t);
+    }
 
     seq.addEvent (MidiMessage::endOfTrack(), length * ticksPerBeat);
     seq.updateMatchedPairs();

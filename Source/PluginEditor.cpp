@@ -396,6 +396,14 @@ SwellChordMotionEditor::SwellChordMotionEditor (SwellChordMotionProcessor& p)
     addChildComponent (hostBpmDisplay);
     setupCombo (instrBox, Instruments::names, "instr");
     setupCombo (styleBox, ChordEngine::styleNames(), "style");
+    styleBox.onChange = [this]
+    {
+        // Like OneMotion, a style can come with its own tempo (when the DAW does not drive it)
+        const int tempo = ChordEngine::styleDef (styleBox.getSelectedItemIndex()).tempo;
+        if (tempo > 0 && ! proc.hostSynced.load())
+            if (auto* p = proc.apvts.getParameter ("bpm"))
+                p->setValueNotifyingHost (p->convertTo0to1 ((float) tempo));
+    };
     setupCombo (keyBox, ChordEngine::keyNames, "key");
     setupCombo (scaleBox, ChordEngine::scaleNames, "scale");
     setupCombo (effectBox, Instruments::effectNames, "effect");

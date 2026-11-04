@@ -1,7 +1,7 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
-#include "ChordEngine.h"
+#include "StyleEngine.h"
 #include "SwellSynth.h"
 
 class SwellChordMotionProcessor : public juce::AudioProcessor,
@@ -78,13 +78,14 @@ private:
     void valueTreeChildOrderChanged (juce::ValueTree&, int, int) override { publishProgression(); }
     void valueTreeRedirected (juce::ValueTree&) override { publishProgression(); }
 
-    void noteOn (juce::MidiBuffer&, int note, int sample);
-    void noteOff (juce::MidiBuffer&, int note, int sample);
+    void noteOn (juce::MidiBuffer&, int channel, int note, int velocity, int sample);
+    void emit (juce::MidiBuffer&, const ChordEngine::NoteEvent&, int sample);
+    void noteOff (juce::MidiBuffer&, int channel, int note, int sample);
     void flushNotes (juce::MidiBuffer&, int sample);
 
     std::atomic<float> *volumeParam, *instrumentParam, *styleParam, *bpmParam, *playParam, *effectParam;
 
-    juce::Synthesiser synth;
+    SwellSynth synth;
     juce::Reverb reverb;
     juce::SmoothedValue<float> gain;
     juce::MidiBuffer generated;
@@ -105,8 +106,9 @@ private:
     bool previewOn = false;
     double previewPpq = 0.0;
 
-    std::array<int, 128> noteCounts {};
+    std::array<std::array<int, 128>, 2> noteCounts {};   // chords on channel 1, bass on channel 2
     std::vector<ChordEngine::NoteEvent> events;
+    ChordEngine::StyleRenderer previewRenderer, audioRenderer;
 
     double sr = 44100.0;
     double internalPpq = 0.0, lastEndPpq = 0.0;

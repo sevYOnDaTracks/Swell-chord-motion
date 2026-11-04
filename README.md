@@ -24,7 +24,7 @@ Le fonctionnement s'inspire du [Chord Player de OneMotion](https://www.onemotion
 | **Palette d'accords** | Tous les accords de la gamme choisie, sur 4 lignes : sus2, accords de base, sus4 et 7e |
 | **12 tonalités × 8 gammes** | Major, Minor, Harmonic major/minor, Melodic minor, Double harmonic major, Neapolitan major/minor |
 | **Chord progression** | Glisser-déposer, réorganisation des blocs, durée par accord (1 à 16 temps), Undo / Redo |
-| **20 styles** | Basic, Pop, Dance, Rock, Swing, Waltz, Reggae, Bossa Nova, Funk, Strumming, Arp, Melodic |
+| **57 styles OneMotion** | Les mêmes styles que le Chord Player de OneMotion (Once, Basic 1-4, Pop 1-4, Dance, Rock 1-4, Swing, Waltz, Jazz Waltz, Reggae, Salsa, Bossa Nova, Samba, Merengue, Cumbia, Reggaeton, Tango, Flamenco 1-3, Ragtime, Country, Polyrhythm, Straddle run, Strumming, Boogie, Funk 1-5, Melodic 1-8, Mod 1-4), joués avec les mêmes règles : swing, sustain, anticipations, 3/4 et 6/8. Vérifiés note par note contre le site |
 | **Arpèges** | 21 patterns façon OneMotion (`Arp 1-3-2-4`, `Arp x-1-2`, `Arp 1-2-3-4-3-2`, `Split 13-2`…), step 1/4 → 1/16T, option Mirror. Remplace la partie accords du style, la basse du style est gardée |
 | **Comme OneMotion** | Noms d'accords écrits selon la gamme (F# mineur → G#dim, D# majeur → F##m), accords joués avec inversions entre G3 et F#4 (bouton INVERSIONS, actif par défaut), basse entre C2 et B2 |
 | **Instruments intégrés** | Piano, E-Piano, Organ, Pad, Pluck, Strings + reverb (Room, Hall, Church) |
@@ -47,6 +47,8 @@ Le fonctionnement s'inspire du [Chord Player de OneMotion](https://www.onemotion
 6. **DRAG MIDI** : glisse le bouton dans ton DAW. Un simple clic ouvre le dossier des exports (`Documents/Swell Chord Motion`).
 
 > Astuce FL Studio : mets **INSTR** sur `MIDI Out`, puis route la sortie MIDI du plugin vers n'importe quel instrument.
+> Comme l'export de OneMotion, les accords sortent sur le canal MIDI 1 et la basse sur le canal 2.
+> En 3/4 et 6/8 (Waltz, Jazz Waltz, Flamenco 1-2, Polyrhythm), une durée de 4 vaut une mesure, comme sur OneMotion.
 
 ## Lancer le Standalone
 
@@ -96,7 +98,8 @@ chmod +x build-mac.sh && ./build-mac.sh
 
 ```
 Source/
-├── ChordEngine.h        théorie musicale, palette, styles, génération des notes
+├── ChordEngine.h        théorie musicale, palette, noms d'accords
+├── StyleEngine.h        les 57 styles OneMotion (notation, voicings, moteur de lecture)
 ├── SwellSynth.h         instruments intégrés
 ├── PluginProcessor.*    paramètres, progression (undo/redo), synchro DAW, export MIDI
 ├── PluginEditor.*       interface : palette, progression, clavier

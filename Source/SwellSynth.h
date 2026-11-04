@@ -20,10 +20,18 @@ public:
     bool appliesToChannel (int) override { return true; }
 };
 
+// Channel state shared by every voice: expression (CC11) and pitch bend, moved by the Mod styles
+struct SwellChannelState
+{
+    float expression = 1.0f;   // 0..1
+    float bend = 1.0f;         // frequency ratio
+};
+
 class SwellVoice : public juce::SynthesiserVoice
 {
 public:
-    explicit SwellVoice (std::atomic<float>* instrumentParam) : instrument (instrumentParam) {}
+    SwellVoice (std::atomic<float>* instrumentParam, const SwellChannelState& channelState)
+        : instrument (instrumentParam), channel (channelState) {}
 
     bool canPlaySound (juce::SynthesiserSound* sound) override { return dynamic_cast<SwellSound*> (sound) != nullptr; }
 
@@ -38,6 +46,8 @@ public:
         phase3 = 0.71;
         lowpass = 0.0f;
         level = velocity * 0.14f;
+        expression = channel.expression;
+        bend = channel.bend;
         mod = 1.0f;
         tine = 1.0f;
         modDecay = (float) std::exp (-3.0 / sr);
@@ -87,9 +97,12 @@ public:
         if (! isVoiceActive())
             return;
 
+        const float expressionCoef = (float) (1.0 - std::exp (-1.0 / (0.004 * sr)));   // ~4 ms glide, no clicks
         for (int i = 0; i < num; ++i)
         {
-            const float v = nextSample() * adsr.getNextSample() * level;
+            expression += expressionCoef * (channel.expression - expression);
+            bend += expressionCoef * (channel.bend - bend);
+            const float v = nextSample() * adsr.getNextSample() * level * expression;
 
             for (int ch = 0; ch < out.getNumChannels(); ++ch)
                 out.addSample (ch, start + i, v);
@@ -149,9 +162,10 @@ private:
         }
 
         auto advance = [] (double& p, double step) { p += step; if (p >= 1.0) p -= 1.0; };
-        advance (phase, inc);
-        advance (phase2, inc * 1.006);
-        advance (phase3, inc * 0.995);
+        const double b = (double) bend;
+        advance (phase, inc * b);
+        advance (phase2, inc * b * 1.006);
+        advance (phase3, inc * b * 0.995);
         return x;
     }
 
@@ -162,9 +176,31 @@ private:
     }
 
     std::atomic<float>* instrument;
+    const SwellChannelState& channel;
+    float expression = 1.0f, bend = 1.0f;
     juce::ADSR adsr;
     std::array<float, 6> harmonics {}, harmonicDecay {};
     double sr = 44100.0, inc = 0.0, phase = 0.0, phase2 = 0.0, phase3 = 0.0;
     float level = 0.0f, lowpass = 0.0f, lpCoef = 1.0f, mod = 1.0f, modDecay = 1.0f, tine = 1.0f, tineDecay = 1.0f;
     int type = 0;
+};
+
+// Synthesiser that keeps the channel expression and pitch bend for its voices
+class SwellSynth : public juce::Synthesiser
+{
+public:
+    SwellChannelState channelState;
+
+    void handleController (int midiChannel, int controllerNumber, int controllerValue) override
+    {
+        if (controllerNumber == 11)
+            channelState.expression = (float) controllerValue / 127.0f;
+        juce::Synthesiser::handleController (midiChannel, controllerNumber, controllerValue);
+    }
+
+    void handlePitchWheel (int midiChannel, int wheelValue) override
+    {
+        channelState.bend = (float) std::pow (2.0, ((wheelValue - 8192) / 8192.0) * 2.0 / 12.0);   // +/- 2 semitones
+        juce::Synthesiser::handlePitchWheel (midiChannel, wheelValue);
+    }
 };
