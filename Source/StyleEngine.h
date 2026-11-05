@@ -617,20 +617,19 @@ inline std::vector<int> scaleTriad (int root, const Voicing& v)
 {
     const auto& steps = scaleSteps (v.scale);
     for (int d = 0; d < 7; ++d)
-    {
-        if ((v.key + steps[(size_t) d]) % 12 != root)
-            continue;
-        std::vector<int> iv;
-        for (int i = 0; i < 3; ++i)
-        {
-            const int idx = d + 2 * i;
-            iv.push_back (steps[(size_t) (idx % 7)] + 12 * (idx / 7) - steps[(size_t) d]);
-        }
-        return iv;
-    }
+        if ((keyPitch (v.key) + steps[(size_t) d]) % 12 == root)
+            if (auto triad = paletteChord (v.key, v.scale, d, 1))
+                return triad->intervals;
     return {};
 }
 } // namespace detail
+
+// Resolve a style's pitch window in the current key. The OneMotion keyboard
+// starts at MIDI 24, including when transposition would push a bass range below C1.
+inline int rangeStart (int styleStart, int key, int shift)
+{
+    return std::max (24, styleStart + keyPitch (key) + shift);
+}
 
 // Chord notes as OneMotion plays them (Chord tab: inversions on, chords from G3 up)
 inline std::vector<int> chordStack (const ChordItem& c, const Voicing& v, int numNotes, int target)
@@ -644,7 +643,8 @@ inline std::vector<int> chordStack (const ChordItem& c, const Voicing& v, int nu
         if (auto triad = detail::scaleTriad (c.root, v); ! triad.empty())
             ref = triad;
 
-    int rootBase = 48 + v.key + (c.root - v.key + 12) % 12;
+    target = rangeStart (target, v.key, v.chordShift);
+    const int rootBase = 48 + keyPitch (v.key) + (c.root - keyPitch (v.key) + 12) % 12;
     auto firstNote = [&] (int b, int base)
     {
         const auto s = detail::stackVoicing (ref, base, b, numNotes, false);
@@ -652,36 +652,24 @@ inline std::vector<int> chordStack (const ChordItem& c, const Voicing& v, int nu
     };
 
     int inversion = 0;
-    if (v.inversions)
+    int n = 0, best = 99999;
+    for (int i = 0; i < 20; ++i)
     {
-        int n = 0, best = 99999;
-        for (int i = 0; i < 20; ++i)
-        {
-            const int d = firstNote (n, rootBase);
-            const int u = d - target < 0 ? 999 : d - target;
-            if (u > best)
-                break;
-            best = u;
-            inversion = n;
-            n += target > d ? 1 : -1;
-        }
-    }
-    else
-    {
-        const int o = firstNote (0, rootBase);
-        int n = 0;
-        while (12 * n + o < target) ++n;
-        while (12 * n + o >= target + 12) --n;
-        rootBase += 12 * n;
+        const int first = firstNote (n, rootBase);
+        const int distance = first < target ? 999 : first - target;
+        if (distance > best) break;
+        best = distance;
+        inversion = n;
+        n += target > first ? 1 : -1;
     }
     return detail::stackVoicing (c.intervals, rootBase, inversion, numNotes, false);
 }
 
-inline std::vector<int> bassStack (const ChordItem& c, int octave)
+inline std::vector<int> bassStack (const ChordItem& c, int start)
 {
-    if (c.intervals.empty())
-        return {};
-    return detail::stackVoicing (c.intervals, 12 * octave + c.root, 0, 999, true);
+    if (c.intervals.empty()) return {};
+    const int lowest = start + ((c.root - start % 12 + 12) % 12);
+    return detail::stackVoicing (c.intervals, lowest, 0, 999, true);
 }
 
 // Default voicing (Once style), used by the test tools
@@ -764,15 +752,19 @@ inline std::vector<NoteEvent> renderProgression (const Progression& prog, const 
 
     // Voicings per chord
     const int chordTargetNote = 12 * chordPart.octave + chordPart.octaveOffset;
+    const int bassStart = rangeStart (12 * bassPart.octave + bassPart.octaveOffset, voicing.key, voicing.bassShift);
+    const int chordStart = rangeStart (chordTargetNote, voicing.key, voicing.chordShift);
     std::vector<std::vector<int>> chordNotesOf, bassNotesOf;
     for (const auto& c : prog)
     {
         chordNotesOf.push_back (chordStack (c, voicing, chordInfo.numNotes, chordTargetNote));
-        bassNotesOf.push_back (bassStack (c, bassPart.octave));
+        bassNotesOf.push_back (bassStack (c, bassStart));
     }
 
     constexpr double releaseGap = 0.02 * 100.0 / 60.0;   // OneMotion lets go 20 ms early (in beats at 100 BPM)
     std::vector<Note> notes;
+    // A fixed seed makes a given performance sound the same live and after a MIDI drop.
+    juce::Random dynamics (0x43686f7264LL);
     std::vector<double> pedalReleases;
     std::vector<std::pair<double, double>> volumeEvents, pitchEvents;
 
@@ -919,7 +911,7 @@ inline std::vector<NoteEvent> renderProgression (const Progression& prog, const 
                 std::array<int, 7> y { 0, 2, 4, 5, 7, 9, 11 };
                 {
                     const auto& steps = scaleSteps (voicing.scale);
-                    const int rel = (chord.root - voicing.key + 12) % 12;
+                    const int rel = (chord.root - keyPitch (voicing.key) + 12) % 12;
                     for (int k = 0; k < 7; ++k)
                         if (steps[(size_t) k] == rel)
                         {
@@ -961,7 +953,7 @@ inline std::vector<NoteEvent> renderProgression (const Progression& prog, const 
                 u += e.halfSteps * h;
                 if (e.fit)
                 {
-                    const int k = 12 * part.octave + part.octaveOffset - 12 * d;
+                    const int k = (isBass ? bassStart : chordStart) - 12 * d;
                     while (u < k) u += 12;
                     while (u >= k + 12) u -= 12;
                 }
@@ -969,6 +961,7 @@ inline std::vector<NoteEvent> renderProgression (const Progression& prog, const 
             };
 
             // Plays one note, with the sustain pedal and the "first hit" logic
+            int attackVoice = 0;
             auto play = [&] (const PatternItem& item, std::optional<int> note)
             {
                 if (pedal && note)
@@ -999,7 +992,6 @@ inline std::vector<NoteEvent> renderProgression (const Progression& prog, const 
                 const double accent = (y % ticksPerBar == 0) ? 1.0 : ((y % beatDiv == 0 || inFirstTick) ? 0.9 : 0.8);
                 const bool held = item.sustain && ! styleSustain;
                 const double q = item.duration * part.noteDuration * ts.beatScale / 2.0;
-                const double vel = part.velocity * item.velocity;
 
                 if (isBass)
                 {
@@ -1022,6 +1014,10 @@ inline std::vector<NoteEvent> renderProgression (const Progression& prog, const 
                 }
 
                 {
+                    // The reference keeps the first strike at full strength and varies upper
+                    // voices by up to about 10% per additional voice in the same attack.
+                    const double spread = std::min (0.7, 0.1 * attackVoice++);
+                    const double vel = part.velocity * item.velocity * (1.0 - spread * dynamics.nextDouble());
                     const double end = held ? -1.0 : w + q * accent;
                     notes.push_back ({ partIndex, *note, w, end, styleSustain && ! held, vel });
                     if (part.doubleOctave)
@@ -1096,8 +1092,9 @@ inline std::vector<NoteEvent> renderProgression (const Progression& prog, const 
         const int vel = juce::jlimit (1, 127, (int) std::lround (127.0 * n.velocity));
         const int channel = n.part + 1;
         out.push_back ({ n.start - from, n.pitch, true, vel, NoteEvent::noteEvent, channel });
-        // Ends stay inside the loop, so a note held to the end still gets its note-off
-        out.push_back ({ std::min (end, to - 1.0e-3) - from, n.pitch, false, 0, NoteEvent::noteEvent, channel });
+        // Keep the release inside the live loop, close enough to round to its final MIDI tick.
+        constexpr double endMargin = 0.25 / midiTicksPerQuarter;
+        out.push_back ({ std::min (end, to - endMargin) - from, n.pitch, false, 0, NoteEvent::noteEvent, channel });
     }
 
     const double from = keptLoop * loopEnd, to = from + loopEnd;
@@ -1133,8 +1130,8 @@ public:
         if (loop <= 0.0)
             return;
 
-        if (! (prog == cachedProg) || voicing.key != cachedVoicing.key || voicing.scale != cachedVoicing.scale
-            || voicing.inversions != cachedVoicing.inversions || style != cachedStyle || arp != cachedArp || ! valid)
+        if (! (prog == cachedProg) || voicing != cachedVoicing
+            || style != cachedStyle || arp != cachedArp || ! valid)
         {
             cachedProg = prog;
             cachedVoicing = voicing;

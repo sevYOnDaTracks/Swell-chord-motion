@@ -40,6 +40,11 @@ private:
     ChordPreview preview;
     std::optional<ChordEngine::ChordItem> chord;
     juce::String name;
+public:
+    void release();
+    std::function<void (PaletteCell*)> onPress;
+    bool hold = false;
+private:
     bool bold, pressed = false;
 };
 
@@ -51,6 +56,7 @@ public:
 
     void refresh();
     void setPlaying (int index);
+    void editSelected() { if (selected >= 0) showMenu (selected); }
     int getSelected() const { return selected; }
     std::function<void()> onSelectionChanged;
 
@@ -85,12 +91,45 @@ public:
     explicit MidiDragButton (SwellChordMotionProcessor& p) : proc (p) {}
 
     void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent&) override { dragging = false; }
     void mouseDrag (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
 
 private:
     SwellChordMotionProcessor& proc;
     bool dragging = false;
+};
+
+class ChordKeyboard : public juce::MidiKeyboardComponent
+{
+public:
+    explicit ChordKeyboard (juce::MidiKeyboardState& stateToUse)
+        : juce::MidiKeyboardComponent (stateToUse, horizontalKeyboard), notes (stateToUse) {}
+    void drawWhiteNote (int, juce::Graphics&, juce::Rectangle<float>, bool, bool, juce::Colour, juce::Colour) override;
+    void drawBlackNote (int, juce::Graphics&, juce::Rectangle<float>, bool, bool, juce::Colour) override;
+private:
+    juce::MidiKeyboardState& notes;
+};
+
+// A vertical time view of the MIDI that will be dropped into the host.
+class ResultRoll : public juce::Component
+{
+public:
+    explicit ResultRoll (SwellChordMotionProcessor& p) : proc (p) {}
+    void refresh();
+    void paint (juce::Graphics&) override;
+    void mouseMove (const juce::MouseEvent&) override;
+    void mouseExit (const juce::MouseEvent&) override;
+    void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
+    juce::String selection;
+private:
+    struct Note { double start, end; int pitch, velocity, channel; };
+    juce::Rectangle<float> boundsFor (const Note&) const;
+    SwellChordMotionProcessor& proc;
+    std::vector<Note> notes;
+    int low = 24, high = 72;
+    double offset = 0, length = 0;
+    juce::String signature;
 };
 
 class SwellChordMotionEditor : public juce::AudioProcessorEditor,
@@ -108,6 +147,7 @@ private:
     void timerCallback() override;
     void refreshPalette();
     void updateEditButtons();
+    void showRanges();
 
     void setupCombo (juce::ComboBox&, const juce::StringArray& items, const juce::String& paramId);
     void setupBar (juce::Slider&, const juce::String& paramId);
@@ -117,28 +157,32 @@ private:
     SwellLookAndFeel lnf;
 
     juce::TextButton playButton { "PLAY" }, undoButton { "UNDO" }, redoButton { "REDO" };
-    juce::Slider volSlider, bpmSlider;
+    juce::Slider volSlider, bpmSlider, velocitySlider;
     juce::ComboBox instrBox, styleBox, keyBox, scaleBox, effectBox;
-    juce::Label volLabel, instrLabel, styleLabel, scaleLabel, effectLabel, bpmLabel;
+    juce::Label volLabel, instrLabel, styleLabel, scaleLabel, effectLabel, bpmLabel, velocityLabel;
     juce::Label hostBpmDisplay;
 
     // Arpeggio (replaces the chord part of the style, the style keeps its bass)
     juce::ComboBox arpBox, arpStepBox;
     juce::Label arpLabel, arpStepLabel;
-    juce::TextButton arpMirrorButton { "MIRROR" }, inversionsButton { "INVERSIONS" };
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> arpMirrorAttachment, inversionsAttachment;   // replaces the tempo slider while the host drives the tempo
+    juce::TextButton arpMirrorButton { "MIRROR" };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> arpMirrorAttachment;
 
     // Takes the key found by Swell Key (see SwellLink.h)
     juce::TextButton swellKeyButton { "SWELL KEY" };
     juce::uint32 swellKeyFlashUntil = 0;
     void useSwellKey();
 
-    juce::MidiKeyboardComponent keyboard;
+    ChordKeyboard keyboard;
 
+    juce::TextButton chordsTab { "Chords" }, resultTab { "Result" }, holdButton { "Hold" }, rangesButton { "Ranges" };
     juce::String paletteTitle;
+    void showResult (bool);
+    bool resultVisible = false;
+    ResultRoll resultRoll;
     std::vector<std::unique_ptr<PaletteCell>> cells;   // 4 rows x 7 degrees
 
-    juce::TextButton shorterButton { "-" }, longerButton { "+" }, deleteButton { "DELETE" }, clearButton { "CLEAR" };
+    juce::TextButton editButton { "Edit" }, shorterButton { "-" }, longerButton { "+" }, deleteButton { "DELETE" }, clearButton { "CLEAR" };
     ProgressionLane lane;
     MidiDragButton midiButton;
 

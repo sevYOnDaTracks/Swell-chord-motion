@@ -1,0 +1,32 @@
+name: Swell Chord Motion Windows
+on:
+  push:
+    branches: ['build/chord-motion-*']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure Windows x64
+        run: cmake -S . -B build -A x64 -DSWELL_BUILD_TESTS=ON -DSWELL_COPY_AFTER_BUILD=OFF
+      - name: Build release
+        run: cmake --build build --config Release --parallel 3
+      - name: Check chords and MIDI
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Stage standalone and VST3
+        shell: pwsh
+        run: |
+          $release = 'build/SwellChordMotion_artefacts/Release'
+          New-Item -Type Directory -Path package
+          Copy-Item "$release/Standalone/Swell Chord Motion.exe" package
+          Copy-Item "$release/VST3/Swell Chord Motion.vst3" package -Recurse
+          if (!(Test-Path 'package/Swell Chord Motion.vst3/Contents/x86_64-win/Swell Chord Motion.vst3')) { throw 'VST3 binary missing' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Swell-Chord-Motion-1.4.2-Windows-x64
+          path: package/
+          if-no-files-found: error

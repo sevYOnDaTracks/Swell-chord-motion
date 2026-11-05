@@ -5,20 +5,21 @@ using namespace juce;
 
 namespace
 {
-const Identifier progressionId ("PROGRESSION"), chordId ("CHORD"), rootId ("root"), intervalsId ("intervals"), beatsId ("beats");
+const Identifier progressionId ("PROGRESSION"), chordId ("CHORD"), rootId ("root"), intervalsId ("intervals"), beatsId ("beats"), baseKeyId ("baseKey"), symbolId ("symbol");
 
 ValueTree toTree (const ChordEngine::ChordItem& c)
 {
     StringArray iv;
     for (int i : c.intervals)
         iv.add (String (i));
-    return ValueTree (chordId, { { rootId, c.root }, { intervalsId, iv.joinIntoString (",") }, { beatsId, c.beats } });
+    return ValueTree (chordId, { { rootId, c.root }, { intervalsId, iv.joinIntoString (",") }, { beatsId, c.beats }, { symbolId, c.symbol } });
 }
 
 ChordEngine::ChordItem fromTree (const ValueTree& t)
 {
     ChordEngine::ChordItem c;
     c.root = jlimit (0, 11, (int) t[rootId]);
+    c.symbol = t[symbolId].toString();
     c.beats = jlimit (1, 16, (int) t[beatsId]);
     for (const auto& s : StringArray::fromTokens (t[intervalsId].toString(), ",", {}))
         c.intervals.push_back (s.getIntValue());
@@ -38,7 +39,9 @@ SwellChordMotionProcessor::SwellChordMotionProcessor()
     effectParam     = apvts.getRawParameterValue ("effect");
     keyParam        = apvts.getRawParameterValue ("key");
     scaleParam      = apvts.getRawParameterValue ("scale");
-    inversionsParam = apvts.getRawParameterValue ("inversions");
+    chordRangeParam = apvts.getRawParameterValue ("chordRange");
+    bassRangeParam  = apvts.getRawParameterValue ("bassRange");
+    velocityParam   = apvts.getRawParameterValue ("velocity");
     arpParam        = apvts.getRawParameterValue ("arp");
     arpStepParam    = apvts.getRawParameterValue ("arpStep");
     arpMirrorParam  = apvts.getRawParameterValue ("arpMirror");
@@ -69,23 +72,26 @@ AudioProcessorValueTreeState::ParameterLayout SwellChordMotionProcessor::createL
 
     layout.add (std::make_unique<AudioParameterInt> (ParameterID { "vol", 1 }, "Vol", 0, 100, 80));
     choice ("instr", "Instr", Instruments::names, Instruments::piano);
-    choice ("style", "Style", ChordEngine::styleNames(), 0);
+    choice ("style", "Style", ChordEngine::styleNames(), ChordEngine::styleNames().indexOf ("Dance 1"));
     choice ("arp", "Arpeggio", ChordEngine::arpNames(), 0);
     choice ("arpStep", "Arp step", ChordEngine::arpStepNames, 1);
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "arpMirror", 1 }, "Arp mirror", false));
-    layout.add (std::make_unique<AudioParameterBool> (ParameterID { "inversions", 1 }, "Inversions", true));
     choice ("key", "Key", ChordEngine::keyNames, 0);
     choice ("scale", "Scale", ChordEngine::scaleNames, 0);
     choice ("effect", "Effect", Instruments::effectNames, 1);
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "bpm", 1 }, "Tempo", NormalisableRange<float> { 40.0f, 240.0f, 1.0f }, 100.0f,
                     AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) { return String (roundToInt (v)) + " BPM"; })));
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "play", 1 }, "Play", false));
+    layout.add (std::make_unique<AudioParameterInt> (ParameterID { "velocity", 2 }, "Velocity", 1, 127, ChordEngine::defaultVelocity));
+    layout.add (std::make_unique<AudioParameterInt> (ParameterID { "chordRange", 3 }, "Chord range shift", -12, 12, ChordEngine::referenceRangeShift));
+    layout.add (std::make_unique<AudioParameterInt> (ParameterID { "bassRange", 3 }, "Bass range shift", -12, 12, ChordEngine::referenceRangeShift));
     return layout;
 }
 
 ChordEngine::Voicing SwellChordMotionProcessor::getVoicing() const
 {
-    return { roundToInt (keyParam->load()), roundToInt (scaleParam->load()), inversionsParam->load() > 0.5f };
+    return { roundToInt (keyParam->load()), roundToInt (scaleParam->load()),
+             roundToInt (chordRangeParam->load()), roundToInt (bassRangeParam->load()) };
 }
 
 ChordEngine::ArpSettings SwellChordMotionProcessor::getArpSettings() const
@@ -101,28 +107,47 @@ ValueTree SwellChordMotionProcessor::progressionTree()
 
 void SwellChordMotionProcessor::ensureProgression()
 {
-    if (apvts.state.getChildWithName (progressionId).isValid())
+    if (auto saved = apvts.state.getChildWithName (progressionId); saved.isValid())
+    {
+        // Roots in earlier sessions were absolute. Anchor them at the saved tonic.
+        if (! saved.hasProperty (baseKeyId)) saved.setProperty (baseKeyId, ChordEngine::keyPitch (getChoice ("key")), nullptr);
         return;
+    }
 
     // Same starting point as a blank song: C - Em7 - Am - F
     auto tree = progressionTree();
-    for (auto c : { ChordEngine::ChordItem { 0, { 0, 4, 7 }, 4 }, ChordEngine::ChordItem { 4, { 0, 3, 7, 10 }, 4 },
-                    ChordEngine::ChordItem { 9, { 0, 3, 7 }, 4 }, ChordEngine::ChordItem { 5, { 0, 4, 7 }, 4 } })
+    tree.setProperty (baseKeyId, 0, nullptr);
+    for (auto c : { ChordEngine::ChordItem { 0, { 0, 4, 7 }, 4, {} }, ChordEngine::ChordItem { 4, { 0, 3, 7, 10 }, 4, "m7" },
+                    ChordEngine::ChordItem { 9, { 0, 3, 7 }, 4, "m" }, ChordEngine::ChordItem { 5, { 0, 4, 7 }, 4, {} } })
         tree.appendChild (toTree (c), nullptr);
 }
 
 ChordEngine::Progression SwellChordMotionProcessor::getProgression() const
 {
+    return progressionInKey (ChordEngine::keyPitch (getChoice ("key")));
+}
+
+ChordEngine::Progression SwellChordMotionProcessor::progressionInKey (int tonic) const
+{
     ChordEngine::Progression prog;
-    for (const auto& child : apvts.state.getChildWithName (progressionId))
-        prog.push_back (fromTree (child));
+    auto tree = apvts.state.getChildWithName (progressionId);
+    const int offset = tonic - (int) tree.getProperty (baseKeyId, tonic);
+    for (const auto& child : tree)
+    {
+        auto chord = fromTree (child);
+        chord.root = (chord.root + offset + 12) % 12;
+        prog.push_back (std::move (chord));
+    }
     return prog;
 }
 
 void SwellChordMotionProcessor::insertChord (const ChordEngine::ChordItem& chord, int index)
 {
     undoManager.beginNewTransaction();
-    progressionTree().addChild (toTree (chord), index, &undoManager);
+    auto tree = progressionTree();
+    auto stored = chord;
+    stored.root = (chord.root + (int) tree[baseKeyId] - ChordEngine::keyPitch (getChoice ("key")) + 12) % 12;
+    tree.addChild (toTree (stored), index, &undoManager);
 }
 
 void SwellChordMotionProcessor::removeChord (int index)
@@ -140,6 +165,17 @@ void SwellChordMotionProcessor::moveChord (int from, int insertIndex)
 
     undoManager.beginNewTransaction();
     tree.moveChild (from, to, &undoManager);
+}
+
+void SwellChordMotionProcessor::replaceChord (int index, const ChordEngine::ChordItem& chord)
+{
+    auto tree = progressionTree();
+    if (! isPositiveAndBelow (index, tree.getNumChildren())) return;
+    undoManager.beginNewTransaction();
+    auto stored = chord;
+    stored.root = (chord.root + (int) tree[baseKeyId] - ChordEngine::keyPitch (getChoice ("key")) + 12) % 12;
+    auto target = tree.getChild (index);
+    target.copyPropertiesFrom (toTree (stored), &undoManager);
 }
 
 void SwellChordMotionProcessor::setChordBeats (int index, int beats)
@@ -179,7 +215,7 @@ void SwellChordMotionProcessor::valueTreePropertyChanged (ValueTree& tree, const
 
 void SwellChordMotionProcessor::publishProgression()
 {
-    auto prog = getProgression();
+    auto prog = progressionInKey (0);
     {
         const SpinLock::ScopedLockType lock (progressionLock);
         sharedProgression = std::move (prog);
@@ -227,7 +263,7 @@ void SwellChordMotionProcessor::emit (MidiBuffer& buffer, const ChordEngine::Not
     else if (e.kind == Kind::pitchBend)
         buffer.addEvent (MidiMessage::pitchWheel (e.channel, e.value), sample);
     else if (e.on)
-        noteOn (buffer, e.channel, e.note, e.value, sample);
+        noteOn (buffer, e.channel, e.note, ChordEngine::scaledVelocity (e.value, roundToInt (velocityParam->load())), sample);
     else
         noteOff (buffer, e.channel, e.note, sample);
 }
@@ -273,12 +309,17 @@ void SwellChordMotionProcessor::processBlock (AudioBuffer<float>& buffer, MidiBu
     if (numSamples == 0)
         return;
 
+    const auto voicing = getVoicing();
+    const int tonic = ChordEngine::keyPitch (voicing.key);
+
     // Pick up chord edits; old notes would never get their note-off otherwise
     {
         const SpinLock::ScopedTryLockType lock (progressionLock);
-        if (lock.isLocked() && sharedVersion != audioVersion)
+        if (lock.isLocked() && (sharedVersion != audioVersion || audioTonic != tonic))
         {
             audioProgression = sharedProgression;
+            for (auto& chord : audioProgression) chord.root = (chord.root + tonic) % 12;
+            audioTonic = tonic;
             audioVersion = sharedVersion;
             flushNotes (generated, 0);
         }
@@ -298,9 +339,7 @@ void SwellChordMotionProcessor::processBlock (AudioBuffer<float>& buffer, MidiBu
 
     const int style = roundToInt (styleParam->load());
     const auto arp = getArpSettings();
-    const auto voicing = getVoicing();
-    const bool voicingChanged = voicing.key != lastVoicing.key || voicing.scale != lastVoicing.scale
-                                || voicing.inversions != lastVoicing.inversions;
+    const bool voicingChanged = voicing != lastVoicing;
     if (style != lastStyle || arp != lastArp || voicingChanged)
     {
         flushNotes (generated, 0);
@@ -356,8 +395,10 @@ void SwellChordMotionProcessor::processBlock (AudioBuffer<float>& buffer, MidiBu
 
     if (previewOn)
     {
-        // A clicked chord plays in the chosen style at the current tempo, on the host's beat grid when it is playing
-        const double start = hostPlaying ? startPpq : previewPpq;
+        // Once is a single attack on pressing the pad, even mid-bar in the DAW.
+        // Rhythmic patterns continue to follow the running host's grid.
+        const bool rhythmicPreview = arp.pattern != 0 || ChordEngine::styleDef (style).name != "Once";
+        const double start = hostPlaying && rhythmicPreview ? startPpq : previewPpq;
         const double end = start + numSamples * ppqPerSample;
         previewRenderer.collect (start, end, previewProgression, voicing, style, arp, events);
 
@@ -447,21 +488,26 @@ String SwellChordMotionProcessor::getExportFileName() const
         names.add (chordName (c).replace ("#", "s"));
 
     auto name = names.joinIntoString ("-").substring (0, 60);
-    return "SwellChordMotion_" + (name.isEmpty() ? String ("empty") : name) + "_" + String (roundToInt (currentBpm.load())) + "bpm.mid";
+    const double bpm = hostSynced.load() ? currentBpm.load() : bpmParam->load();
+    return "SwellChordMotion_" + (name.isEmpty() ? String ("empty") : name) + "_" + String (roundToInt (bpm)) + "bpm.mid";
 }
 
-File SwellChordMotionProcessor::exportMidiFile() const
+bool SwellChordMotionProcessor::writeMidiTo (OutputStream& dest) const
 {
-    const auto prog = getProgression();
+    const int style = getChoice ("style");
+    const int strength = getChoice ("velocity");
+    const auto voicing = getVoicing();
+    const auto prog = progressionInKey (ChordEngine::keyPitch (voicing.key));
+    if (prog.empty()) return false;
     std::vector<ChordEngine::NoteEvent> evs;
-    const double length = ChordEngine::loopLength (prog, getChoice ("style"));
+    const double length = ChordEngine::loopLength (prog, style);
     ChordEngine::StyleRenderer renderer;
-    renderer.collect (0.0, length, prog, getVoicing(), getChoice ("style"), getArpSettings(), evs);
+    renderer.collect (0.0, length, prog, voicing, style, getArpSettings(), evs);
 
-    constexpr int ticksPerBeat = 960;
-    const auto& ts = ChordEngine::styleDef (getChoice ("style")).time;
+    constexpr int ticksPerBeat = ChordEngine::midiTicksPerQuarter;
+    const auto& ts = ChordEngine::styleDef (style).time;
     MidiMessageSequence seq;
-    seq.addEvent (MidiMessage::tempoMetaEvent (roundToInt (60000000.0 / currentBpm.load())), 0.0);
+    seq.addEvent (MidiMessage::tempoMetaEvent (roundToInt (60000000.0 / (hostSynced.load() ? currentBpm.load() : bpmParam->load()))), 0.0);
     seq.addEvent (MidiMessage::timeSignatureMetaEvent (ts.numerator, ts.denominator), 0.0);
 
     using Kind = ChordEngine::NoteEvent::Kind;
@@ -470,7 +516,7 @@ File SwellChordMotionProcessor::exportMidiFile() const
         const double t = e.ppq * ticksPerBeat;
         if (e.kind == Kind::expression)     seq.addEvent (MidiMessage::controllerEvent (e.channel, 11, e.value), t);
         else if (e.kind == Kind::pitchBend) seq.addEvent (MidiMessage::pitchWheel (e.channel, e.value), t);
-        else if (e.on)                      seq.addEvent (MidiMessage::noteOn (e.channel, e.note, (uint8) jlimit (1, 127, e.value)), t);
+        else if (e.on)                      seq.addEvent (MidiMessage::noteOn (e.channel, e.note, (uint8) ChordEngine::scaledVelocity (e.value, strength)), t);
         else                                seq.addEvent (MidiMessage::noteOff (e.channel, e.note), t);
     }
 
@@ -481,16 +527,22 @@ File SwellChordMotionProcessor::exportMidiFile() const
     midiFile.setTicksPerQuarterNote (ticksPerBeat);
     midiFile.addTrack (seq);
 
-    auto file = getExportFolder().getChildFile (getExportFileName());
-    file.deleteFile();
+    return midiFile.writeTo (dest, 0);
+}
 
-    FileOutputStream stream (file);
-    if (stream.openedOk())
+File SwellChordMotionProcessor::exportMidiFile (const File& folder) const
+{
+    // Each drag gets an immutable file. Hosts can continue reading a previous drop.
+    const auto name = File::createLegalFileName (getExportFileName()).upToLastOccurrenceOf (".mid", false, true);
+    const auto file = folder.getChildFile (name + "_" + Uuid().toString().substring (0, 12) + ".mid");
+    TemporaryFile temp (file);
     {
-        midiFile.writeTo (stream);
+        FileOutputStream stream (temp.getFile());
+        if (! stream.openedOk() || ! writeMidiTo (stream)) return {};
         stream.flush();
+        if (stream.getStatus().failed()) return {};
     }
-    return file;
+    return temp.overwriteTargetFileWithTemporary() ? file : File();
 }
 
 void SwellChordMotionProcessor::getStateInformation (MemoryBlock& destData)
@@ -505,7 +557,13 @@ void SwellChordMotionProcessor::setStateInformation (const void* data, int sizeI
     {
         if (xml->hasTagName (apvts.state.getType()))
         {
-            apvts.replaceState (ValueTree::fromXml (*xml));
+            auto state = ValueTree::fromXml (*xml);
+            // A 1.4.0 project has no stored ranges. Always use the reference defaults
+            // when opening it, even if the previously loaded project had custom ranges.
+            for (const auto* id : { "chordRange", "bassRange" })
+                if (! state.getChildWithProperty ("id", id).isValid())
+                    state.appendChild (ValueTree ("PARAM", {{ "id", id }, { "value", ChordEngine::referenceRangeShift }}), nullptr);
+            apvts.replaceState (state);
             ensureProgression();
             undoManager.clearUndoHistory();
             publishProgression();

@@ -44,6 +44,7 @@ public:
     void insertChord (const ChordEngine::ChordItem&, int index);   // index < 0 appends
     void removeChord (int index);
     void moveChord (int from, int insertIndex);
+    void replaceChord (int index, const ChordEngine::ChordItem&);
     void setChordBeats (int index, int beats);
     void clearProgression();
 
@@ -52,7 +53,8 @@ public:
     void stopPreview();
 
     // Writes the progression as a .mid file in the export folder and returns it
-    juce::File exportMidiFile() const;
+    juce::File exportMidiFile (const juce::File& folder = getExportFolder()) const;
+    bool writeMidiTo (juce::OutputStream&) const;
     juce::String getExportFileName() const;
     static juce::File getExportFolder();
 
@@ -70,6 +72,7 @@ private:
 
     juce::ValueTree progressionTree();
     void ensureProgression();
+    ChordEngine::Progression progressionInKey (int tonic) const;
     void publishProgression();
 
     void valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&) override;
@@ -95,7 +98,7 @@ private:
     ChordEngine::Progression sharedProgression;
     int sharedVersion = 0;
     ChordEngine::Progression audioProgression;
-    int audioVersion = -1;
+    int audioVersion = -1, audioTonic = -1;
 
     // Previewed chord handed from the message thread to the audio thread
     juce::SpinLock previewLock;
@@ -115,8 +118,8 @@ private:
     bool wasPlaying = false, internalRunning = false;
     int lastStyle = -1;
     ChordEngine::ArpSettings lastArp { -1, -1, false };
-    ChordEngine::Voicing lastVoicing { -1, -1, false };
-    std::atomic<float> *keyParam, *scaleParam, *inversionsParam, *arpParam, *arpStepParam, *arpMirrorParam;
+    ChordEngine::Voicing lastVoicing { -1, -1 };
+    std::atomic<float> *keyParam, *scaleParam, *velocityParam, *chordRangeParam, *bassRangeParam, *arpParam, *arpStepParam, *arpMirrorParam;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SwellChordMotionProcessor)
 };

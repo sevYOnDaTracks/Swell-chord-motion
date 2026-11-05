@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.22)
 set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "")
 set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "")
 
-project(SwellChordMotion VERSION 1.3.0)
+project(SwellChordMotion VERSION 1.4.2)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -21,14 +21,13 @@ FetchContent_Declare(JUCE
 FetchContent_MakeAvailable(JUCE)
 
 set(SWELL_FORMATS Standalone VST3)
-set(SWELL_COPY_AFTER_BUILD FALSE)
+option(SWELL_COPY_AFTER_BUILD "Install built plug-ins in the user plug-in folders" ${APPLE})
 if(APPLE)
     list(APPEND SWELL_FORMATS AU)
-    # On Mac the plugin folders live in ~/Library, so copying needs no admin rights
-    set(SWELL_COPY_AFTER_BUILD TRUE)
 endif()
 
 juce_add_plugin(SwellChordMotion
+    ICON_BIG Resources/chord_motion_icon.png
     COMPANY_NAME "Swell-audio"
     BUNDLE_ID com.swell.chordmotion
     PLUGIN_MANUFACTURER_CODE Swel
@@ -45,7 +44,7 @@ juce_add_plugin(SwellChordMotion
     AU_MAIN_TYPE kAudioUnitType_MusicDevice)
 
 juce_add_binary_data(SwellChordMotionData SOURCES
-    Resources/swell_logo.png)
+    Resources/chord_motion_icon.png)
 
 target_sources(SwellChordMotion PRIVATE
     Source/PluginProcessor.cpp
@@ -64,3 +63,17 @@ target_link_libraries(SwellChordMotion
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags)
+
+option(SWELL_BUILD_TESTS "Build chord palette and MIDI regression tests" OFF)
+if(SWELL_BUILD_TESTS)
+    enable_testing()
+    add_executable(SwellChordParity Tests/ChordParity.cpp)
+    target_link_libraries(SwellChordParity PRIVATE SwellChordMotion)
+    target_include_directories(SwellChordParity PRIVATE Source
+        $<TARGET_PROPERTY:SwellChordMotion,INCLUDE_DIRECTORIES>)
+    target_compile_definitions(SwellChordParity PRIVATE
+        $<TARGET_PROPERTY:SwellChordMotion,COMPILE_DEFINITIONS>)
+    add_test(NAME ChordParity COMMAND SwellChordParity
+        "${CMAKE_CURRENT_SOURCE_DIR}/Tests/ReferenceVoicings.txt"
+        "${CMAKE_CURRENT_SOURCE_DIR}/Tests/OnceRanges.txt")
+endif()

@@ -4,7 +4,7 @@
 set -e
 cd "$(dirname "$0")"
 
-cmake -S . -B build-mac -DCMAKE_BUILD_TYPE=Release
+cmake -S . -B build-mac -DCMAKE_BUILD_TYPE=Release -DSWELL_COPY_AFTER_BUILD=ON
 cmake --build build-mac --config Release --parallel
 
 echo ""

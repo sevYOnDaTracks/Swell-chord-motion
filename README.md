@@ -22,15 +22,15 @@ Le fonctionnement s'inspire du [Chord Player de OneMotion](https://www.onemotion
 | | |
 |---|---|
 | **Palette d'accords** | Tous les accords de la gamme choisie, sur 4 lignes : sus2, accords de base, sus4 et 7e |
-| **12 tonalités × 8 gammes** | Major, Minor, Harmonic major/minor, Melodic minor, Double harmonic major, Neapolitan major/minor |
+| **17 écritures de tonalité × 49 modes** | Les 8 gammes de base et leurs modes, avec des choix distincts pour C#/Db, D#/Eb, F#/Gb, G#/Ab et A#/Bb |
 | **Chord progression** | Glisser-déposer, réorganisation des blocs, durée par accord (1 à 16 temps), Undo / Redo |
 | **57 styles OneMotion** | Les mêmes styles que le Chord Player de OneMotion (Once, Basic 1-4, Pop 1-4, Dance, Rock 1-4, Swing, Waltz, Jazz Waltz, Reggae, Salsa, Bossa Nova, Samba, Merengue, Cumbia, Reggaeton, Tango, Flamenco 1-3, Ragtime, Country, Polyrhythm, Straddle run, Strumming, Boogie, Funk 1-5, Melodic 1-8, Mod 1-4), joués avec les mêmes règles : swing, sustain, anticipations, 3/4 et 6/8. Vérifiés note par note contre le site |
 | **Arpèges** | 21 patterns façon OneMotion (`Arp 1-3-2-4`, `Arp x-1-2`, `Arp 1-2-3-4-3-2`, `Split 13-2`…), step 1/4 → 1/16T, option Mirror. Remplace la partie accords du style, la basse du style est gardée |
-| **Comme OneMotion** | Noms d'accords écrits selon la gamme (F# mineur → G#dim, D# majeur → F##m), accords joués avec inversions entre G3 et F#4 (bouton INVERSIONS, actif par défaut), basse entre C2 et B2 |
+| **Accords et registre** | Les accords, leurs altérations et les cases vides suivent la palette OneMotion. Les plages de notes suivent la tonalité. Avec **Once**, le réglage initial reprend le projet de référence : en Fa♯ majeur, l’accord **B** joue **Si3–Ré♯4–Fa♯4** sur une basse **Si1**. **Ranges** permet de choisir séparément le début de la plage des accords ou de la basse et de revenir au réglage de référence. **Edit** donne accès à 82 types d’accords, dont add9, mmaj7 et 13#11 |
 | **Instruments intégrés** | Piano, E-Piano, Organ, Pad, Pluck, Strings + reverb (Room, Hall, Church) |
 | **MIDI Out** | Pilote tes propres VST avec la progression |
 | **Synchro DAW** | Suit le tempo et la lecture de ton DAW |
-| **DRAG MIDI** | Glisse la progression en `.mid` dans ta playlist (FL Studio, Ableton, Logic…) |
+| **DRAG MIDI** | Exporte la progression en MIDI avec la vélocité de chaque note. **VEL** règle la force des attaques de 1 à 127 pour la lecture et le fichier. **Result** affiche les notes, en ambre pour les accords et en bleu pour la basse |
 | **SWELL KEY** | Un clic règle KEY et SCALE sur la gamme trouvée par le plugin Swell Key |
 
 ## Utilisation
@@ -40,7 +40,7 @@ Le fonctionnement s'inspire du [Chord Player de OneMotion](https://www.onemotion
 3. **Glisse-le** dans *Chord Progression*, ou **double-clique** dessus pour l'ajouter à la fin.
 4. Dans la progression :
    - **glisse un bloc** pour le déplacer ;
-   - **clic droit** sur un bloc pour régler sa durée, le dupliquer ou le supprimer ;
+   - **Edit** ou **clic droit** sur un bloc pour changer sa fondamentale, son type ou sa durée, le dupliquer ou le supprimer ;
    - **- / +** pour changer la durée de l'accord sélectionné.
 5. **STYLE** et **INSTR** : choisis le rythme et le son, puis **PLAY**.
    - **ARP** : choisis un arpège (`1` = note la plus grave de l'accord, `x` = silence ; au-delà du nombre de notes on monte d'une octave). **STEP** règle la durée de chaque note, **MIRROR** compte les notes depuis le haut. `Off (style)` revient aux accords du style.
@@ -115,4 +115,4 @@ Source/
 
 ---
 
-<p align="center"><sub>Swell-audio · Chord Motion v1.2.0 · by @sevyondatracks</sub></p>
+<p align="center"><sub>Swell-audio · Chord Motion v1.4.2 · by @sevyondatracks</sub></p>

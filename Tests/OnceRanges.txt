@@ -1,0 +1,49 @@
+Major|c82707d9
+Dorian|a300e672
+Phrygian|c96de081
+Lydian|56b3a51d
+Mixolydian|e7f7166c
+Minor|350dd72b
+Locrian|d75ca71c
+Harmonic major|78039e5f
+Dorian b5|77f1fc5b
+Phrygian b4|2f761a8e
+Lydian b3|e6b14e00
+Mixolydian b2|1acc24e0
+Lydian #2 #5|d19aa206
+Locrian bb7|cdefff47
+Harmonic minor|857c5909
+Locrian #6|e5b792e1
+Major #5|34ff5de1
+Dorian #4|22abbb32
+Phrygian Dominant|bbe6416
+Lydian #2|72b14051
+Super-Locrian bb7|6a720c10
+Melodic minor|cb4ed1a9
+Dorian b9|48ef632b
+Lydian #5|780f40c5
+Lydian Dominant|f3b43ee8
+Mixolydian b6|b2443952
+Locrian #2|8a45a0fa
+Super-Locrian|29b5971d
+Double harmonic major|156c252d
+Lydian #2 #6|eb04ae1b
+Ultra-Phrygian|f4f182ad
+Hungarian minor|d1ae3ac
+Oriental|d82c4095
+Ionian #2 #5|74e8976c
+Locrian bb3 bb7|b6705653
+Neapolitan major|914300cb
+Leading whole-tone|44ba84df
+Lydian Dominant #5|a1cd7623
+Lydian Dominant b6|3eda0615
+Major locrian|540c460d
+Semi-Locrian b4|741cc97e
+Super-Locrian bb3|cc3ddd68
+Neapolitan minor|e820ab89
+Lydian #6|aa4e647
+Mixolydian #5|e0be7b33
+Aeolian #4|aeb177a4
+Locrian Dominant|73e35499
+Ionian #2|2b85218e
+Ultra-Locrian bb3|85f6ae9a

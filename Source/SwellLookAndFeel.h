@@ -3,18 +3,26 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "BinaryData.h"
 
-// Shared Swell brand style: anthracite panels, orange accents
+// Swell's graphite surfaces, charcoal controls and orange playhead.
 namespace SwellColours
 {
-inline const juce::Colour background { 0xff131417 };
-inline const juce::Colour panel      { 0xff1b1c20 };
-inline const juce::Colour panelLight { 0xff25262b };
-inline const juce::Colour control    { 0xff222328 };
-inline const juce::Colour border     { 0xff34353b };
-inline const juce::Colour track      { 0xff2c2d33 };
-inline const juce::Colour orange     { 0xffff8a3d };
-inline const juce::Colour text       { 0xffeeeef1 };
-inline const juce::Colour dim        { 0xff9a9ba3 };
+inline const juce::Colour background   { 0xff161618 };
+inline const juce::Colour panel        { 0xff1c1d21 };
+inline const juce::Colour panelLight   { 0xff242427 };
+inline const juce::Colour control      { 0xff17171a };
+inline const juce::Colour border       { 0xff39393f };
+inline const juce::Colour track        { 0xff303034 };
+inline const juce::Colour orange       { 0xffff8c39 };
+inline const juce::Colour text         { 0xfff0eff2 };
+inline const juce::Colour dim          { 0xffb7b6bd };
+inline const juce::Colour pad          { 0xff222226 };
+inline const juce::Colour triadPad     { 0xff303034 };
+inline const juce::Colour activePad    { 0xffff8c39 };
+inline const juce::Colour accent   { 0xffff8c39 };
+inline const juce::Colour bassKey      { 0xffffd39d };
+inline const juce::Colour chordKey     { 0xffff8c39 };
+inline const juce::Colour cursor       { 0xffff8c39 };
+inline const juce::Colour buttonFace   { 0xff26262a };
 } // namespace SwellColours
 
 inline juce::Font swellFont (float size, bool bold = false)
@@ -22,10 +30,10 @@ inline juce::Font swellFont (float size, bool bold = false)
     return juce::Font (juce::FontOptions (size, bold ? juce::Font::bold : juce::Font::plain));
 }
 
-// The Swell logo (white on transparent, from Resources/swell_logo.png)
+// Product icon with the original Swell mark above a piano keyboard.
 inline void drawSwellLogo (juce::Graphics& g, juce::Rectangle<float> r)
 {
-    const auto logo = juce::ImageCache::getFromMemory (BinaryData::swell_logo_png, BinaryData::swell_logo_pngSize);
+    const auto logo = juce::ImageCache::getFromMemory (BinaryData::chord_motion_icon_png, BinaryData::chord_motion_icon_pngSize);
     g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
     g.drawImage (logo, r, juce::RectanglePlacement::centred);
 }
@@ -40,13 +48,13 @@ public:
         setColour (juce::ComboBox::backgroundColourId, control);
         setColour (juce::ComboBox::outlineColourId, border);
         setColour (juce::ComboBox::textColourId, text);
-        setColour (juce::ComboBox::arrowColourId, orange);
+        setColour (juce::ComboBox::arrowColourId, dim);
         setColour (juce::PopupMenu::backgroundColourId, panelLight);
         setColour (juce::PopupMenu::textColourId, text);
-        setColour (juce::PopupMenu::highlightedBackgroundColourId, orange);
+        setColour (juce::PopupMenu::highlightedBackgroundColourId, activePad);
         setColour (juce::PopupMenu::highlightedTextColourId, background);
-        setColour (juce::TextButton::buttonColourId, control);
-        setColour (juce::TextButton::buttonOnColourId, orange);
+        setColour (juce::TextButton::buttonColourId, buttonFace);
+        setColour (juce::TextButton::buttonOnColourId, activePad);
         setColour (juce::TextButton::textColourOffId, text);
         setColour (juce::TextButton::textColourOnId, background);
         setColour (juce::Slider::textBoxTextColourId, text);
@@ -101,9 +109,11 @@ public:
 
         const float ax = (float) width - 14.0f, ay = (float) height * 0.5f;
         juce::Path arrow;
-        arrow.addTriangle (ax - 4.5f, ay - 2.5f, ax + 4.5f, ay - 2.5f, ax, ay + 3.0f);
-        g.setColour (orange);
-        g.fillPath (arrow);
+        arrow.startNewSubPath (ax - 3.5f, ay - 1.5f);
+        arrow.lineTo (ax, ay + 2.0f);
+        arrow.lineTo (ax + 3.5f, ay - 1.5f);
+        g.setColour (box.findColour (juce::ComboBox::arrowColourId));
+        g.strokePath (arrow, juce::PathStrokeType (1.3f));
     }
 
     juce::Font getComboBoxFont (juce::ComboBox&) override { return swellFont (14.0f); }
@@ -116,24 +126,43 @@ public:
 
     juce::Font getPopupMenuFont() override { return swellFont (14.0f); }
 
-    void drawButtonBackground (juce::Graphics& g, juce::Button& button, const juce::Colour&, bool over, bool down) override
+    void drawButtonBackground (juce::Graphics& g, juce::Button& button, const juce::Colour& base, bool over, bool down) override
     {
         using namespace SwellColours;
         const auto r = button.getLocalBounds().toFloat().reduced (0.5f);
         const bool on = button.getToggleState();
 
-        auto colour = on ? orange : control;
+        auto colour = on ? button.findColour (juce::TextButton::buttonOnColourId) : base;
         if (over) colour = colour.brighter (0.08f);
         if (down) colour = colour.darker (0.1f);
 
         g.setColour (colour);
         g.fillRoundedRectangle (r, 6.0f);
 
-        if (! on)
+        g.setColour (on ? accent.withAlpha (0.65f) : border);
+        g.drawRoundedRectangle (r, 6.0f, 1.0f);
+    }
+
+    void drawLinearSlider (juce::Graphics& g, int x, int y, int w, int h, float pos, float minPos,
+                           float maxPos, juce::Slider::SliderStyle style, juce::Slider& slider) override
+    {
+        if (style != juce::Slider::LinearBar)
         {
-            g.setColour (border);
-            g.drawRoundedRectangle (r, 6.0f, 1.0f);
+            LookAndFeel_V4::drawLinearSlider (g, x, y, w, h, pos, minPos, maxPos, style, slider);
+            return;
         }
+        using namespace SwellColours;
+        auto r = juce::Rectangle<float> ((float) x, (float) y, (float) w, (float) h).reduced (0.5f);
+        g.setColour (control);
+        g.fillRoundedRectangle (r, 5.0f);
+        g.setColour (border);
+        g.drawRoundedRectangle (r, 5.0f, 1.0f);
+        auto strip = r.reduced (6.0f, 3.0f).removeFromBottom (2.0f);
+        const float fraction = (float) slider.valueToProportionOfLength (slider.getValue());
+        g.setColour (track);
+        g.fillRoundedRectangle (strip, 1.0f);
+        g.setColour (slider.findColour (juce::Slider::trackColourId));
+        g.fillRoundedRectangle (strip.withWidth (strip.getWidth() * fraction), 1.0f);
     }
 
     juce::Font getTextButtonFont (juce::TextButton&, int) override { return swellFont (13.0f, true); }
