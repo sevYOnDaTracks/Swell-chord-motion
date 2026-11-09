@@ -249,6 +249,7 @@ void checkRangeRestore()
 
 int main (int argc, char** argv)
 {
+    swell::Licence::unlockForTesting(); // rendu hors ligne, sans fichier de licence
     ScopedJuceInitialiser_GUI gui;
     try
     {

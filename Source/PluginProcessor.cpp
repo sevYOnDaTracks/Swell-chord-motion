@@ -300,7 +300,7 @@ void SwellChordMotionProcessor::flushNotes (MidiBuffer& buffer, int sample)
 }
 
 void SwellChordMotionProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer& midi)
-{
+{ if (! licence->isUnlocked()) { buffer.clear(); return; } 
     ScopedNoDenormals noDenormals;
     const int numSamples = buffer.getNumSamples();
     buffer.clear();
@@ -573,7 +573,7 @@ void SwellChordMotionProcessor::setStateInformation (const void* data, int sizeI
 
 AudioProcessorEditor* SwellChordMotionProcessor::createEditor()
 {
-    return new SwellChordMotionEditor (*this);
+    return swell::LicenceGuard::attach (new SwellChordMotionEditor (*this));
 }
 
 AudioProcessor* JUCE_CALLTYPE createPluginFilter()

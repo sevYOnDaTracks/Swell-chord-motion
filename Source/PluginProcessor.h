@@ -1,12 +1,17 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include "Licence/SwellLicence.h"
 #include "StyleEngine.h"
 #include "SwellSynth.h"
 
 class SwellChordMotionProcessor : public juce::AudioProcessor,
                                   private juce::ValueTree::Listener
 {
+public:
+    // Licence Swell : partagée par toutes les instances ; silence tant que le plugin n'est pas activé.
+    juce::SharedResourcePointer<swell::Licence> licence;
+
 public:
     SwellChordMotionProcessor();
     ~SwellChordMotionProcessor() override;

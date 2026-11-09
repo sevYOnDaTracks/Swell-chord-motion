@@ -1,0 +1,43 @@
+name: Build Swell Chord Motion
+on: [push, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure Windows
+        if: runner.os == 'Windows'
+        run: cmake -S . -B build -A x64 -DSWELL_BUILD_TESTS=ON -DSWELL_COPY_AFTER_BUILD=OFF
+      - name: Configure universal Mac
+        if: runner.os == 'macOS'
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DSWELL_BUILD_TESTS=ON -DSWELL_COPY_AFTER_BUILD=OFF '-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64' -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+      - run: cmake --build build --config Release --parallel 3
+      - run: ctest --test-dir build -C Release --output-on-failure
+      - name: Sign and package macOS bundles
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p package
+          cd build/SwellChordMotion_artefacts/Release
+          for bundle in "AU/Swell Chord Motion.component" "VST3/Swell Chord Motion.vst3" "Standalone/Swell Chord Motion.app"; do
+            codesign --force --deep -s - "$bundle"
+            codesign --verify --deep --strict "$bundle"
+          done
+          ditto -c -k --keepParent VST3 ../../../package/Swell-Chord-Motion-macOS-VST3.zip
+          ditto -c -k --keepParent AU ../../../package/Swell-Chord-Motion-macOS-AU.zip
+          ditto -c -k --keepParent Standalone ../../../package/Swell-Chord-Motion-macOS-Standalone.zip
+      - name: Package Windows binaries
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path package -Force
+          Compress-Archive -Path 'build/SwellChordMotion_artefacts/Release/VST3/*.vst3', 'build/SwellChordMotion_artefacts/Release/Standalone/*.exe' -DestinationPath 'package/Swell-Chord-Motion-Windows.zip'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Swell-Chord-Motion-${{ runner.os }}
+          path: package/*.zip
+          if-no-files-found: error
